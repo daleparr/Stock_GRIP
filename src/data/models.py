@@ -165,6 +165,14 @@ def create_database(database_url: str):
     """Create database and all tables"""
     engine = create_engine(database_url)
     Base.metadata.create_all(engine)
+    
+    # Also create live data tables
+    try:
+        from .live_data_models import Base as LiveBase
+        LiveBase.metadata.create_all(engine)
+    except ImportError:
+        pass  # Live data models not available
+    
     return engine
 
 def get_session(engine):
