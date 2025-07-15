@@ -210,7 +210,7 @@ def test_mpc_rl_optimization():
                 print(f"✅ MPC-RL-MOBO decision successful")
                 print(f"   Action: {action.action_type}")
                 print(f"   Quantity: {action.quantity}")
-                print(f"   Cost: ${action.cost:.2f}")
+                print(f"   Cost: £{action.cost:.2f}")
             else:
                 print("ℹ️ No action recommended by MPC-RL-MOBO")
         else:

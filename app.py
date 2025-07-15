@@ -211,7 +211,7 @@ def show_dashboard():
     with col3:
         st.metric(
             "Total Cost",
-            f"${report['summary']['total_cost']:,.0f}",
+            f"£{report['summary']['total_cost']:,.0f}",
             delta=f"-${report['summary']['total_cost'] * 0.05:.0f}"
         )
     
@@ -251,7 +251,7 @@ def show_dashboard():
             x='date', 
             y='total_cost',
             title="Daily Inventory Costs",
-            labels={'total_cost': 'Total Cost ($)', 'date': 'Date'}
+            labels={'total_cost': 'Total Cost (£)', 'date': 'Date'}
         )
         fig.update_layout(height=400)
         st.plotly_chart(fig, use_container_width=True)
@@ -415,10 +415,10 @@ def show_product_analysis():
         
         with col1:
             st.metric("Category", selected_product.category)
-            st.metric("Unit Cost", f"${selected_product.unit_cost:.2f}")
+            st.metric("Unit Cost", f"£{selected_product.unit_cost:.2f}")
         
         with col2:
-            st.metric("Selling Price", f"${selected_product.selling_price:.2f}")
+            st.metric("Selling Price", f"£{selected_product.selling_price:.2f}")
             st.metric("Lead Time", f"{selected_product.lead_time_days} days")
         
         with col3:

@@ -26,8 +26,16 @@ class SampleDataGenerator:
         # Sample data parameters
         self.channels = ['online', 'pos', 'marketplace', 'wholesale']
         self.customer_segments = ['premium', 'regular', 'budget']
-        self.fulfillment_methods = ['warehouse', 'store_pickup', 'dropship']
-        self.locations = ['warehouse_a', 'warehouse_b', 'store_01', 'store_02', 'store_03']
+        
+        # Use localized settings if available
+        try:
+            from config.localization import ALL_LOCATIONS, FULFILLMENT_METHODS
+            self.locations = ALL_LOCATIONS
+            self.fulfillment_methods = FULFILLMENT_METHODS
+        except ImportError:
+            self.fulfillment_methods = ['warehouse', 'store_pickup', 'dropship']
+            self.locations = ['warehouse_a', 'warehouse_b', 'store_01', 'store_02', 'store_03']
+        
         self.suppliers = ['SUP001', 'SUP002', 'SUP003', 'SUP004', 'SUP005']
         self.weather_factors = ['hot', 'cold', 'rainy', 'normal']
         self.event_impacts = ['promotion', 'holiday', 'none']

@@ -273,7 +273,7 @@ def show_store_manager_dashboard():
     with col2:
         st.metric(
             "💰 Weekly Savings",
-            f"${data['financial_impact']['weekly_savings']:,}",
+            f"£{data['financial_impact']['weekly_savings']:,}",
             delta="vs manual management"
         )
         st.caption("Money saved through smart decisions")
@@ -281,7 +281,7 @@ def show_store_manager_dashboard():
     with col3:
         st.metric(
             "🛡️ Revenue Protected",
-            f"${data['financial_impact']['revenue_protected']:,}",
+            f"£{data['financial_impact']['revenue_protected']:,}",
             delta="prevented losses"
         )
         st.caption("Sales saved by avoiding stockouts")
@@ -385,7 +385,7 @@ def show_inventory_planner_dashboard():
     with col1:
         st.metric(
             "💸 Inventory Costs",
-            f"${data['financial_impact']['weekly_savings'] * 4:,}",
+            f"£{data['financial_impact']['weekly_savings'] * 4:,}",
             delta=f"-15% vs last month"
         )
         st.caption("Total inventory investment")
@@ -577,7 +577,7 @@ def show_regional_manager_dashboard():
     with col2:
         st.metric(
             "💸 Quarterly Savings",
-            f"${data['financial_impact']['weekly_savings'] * 12:,}",
+            f"£{data['financial_impact']['weekly_savings'] * 12:,}",
             delta="across all locations"
         )
         st.caption("Operational cost reduction")
@@ -585,7 +585,7 @@ def show_regional_manager_dashboard():
     with col3:
         st.metric(
             "🛡️ Revenue Protection",
-            f"${data['financial_impact']['revenue_protected'] * 4:,}",
+            f"£{data['financial_impact']['revenue_protected'] * 4:,}",
             delta="prevented losses"
         )
         st.caption("Stockout prevention value")
@@ -602,11 +602,11 @@ def show_regional_manager_dashboard():
     st.markdown("### 🏪 Store Performance Comparison")
     
     store_data = pd.DataFrame([
-        {"Store": "Downtown", "Revenue": "$125K", "Revenue_Numeric": 125000, "Margin": "28%", "Margin_Numeric": 28, "Efficiency": "94%", "Efficiency_Numeric": 94, "ROI": "320%", "Status": "🟢 Excellent"},
-        {"Store": "Mall Location", "Revenue": "$98K", "Revenue_Numeric": 98000, "Margin": "25%", "Margin_Numeric": 25, "Efficiency": "89%", "Efficiency_Numeric": 89, "ROI": "285%", "Status": "🟢 Good"},
-        {"Store": "Suburban", "Revenue": "$87K", "Revenue_Numeric": 87000, "Margin": "30%", "Margin_Numeric": 30, "Efficiency": "91%", "Efficiency_Numeric": 91, "ROI": "295%", "Status": "🟢 Good"},
-        {"Store": "Airport", "Revenue": "$156K", "Revenue_Numeric": 156000, "Margin": "22%", "Margin_Numeric": 22, "Efficiency": "85%", "Efficiency_Numeric": 85, "ROI": "245%", "Status": "🟡 Monitor"},
-        {"Store": "University", "Revenue": "$76K", "Revenue_Numeric": 76000, "Margin": "26%", "Margin_Numeric": 26, "Efficiency": "88%", "Efficiency_Numeric": 88, "ROI": "275%", "Status": "🟢 Good"}
+        {"Store": "Downtown", "Revenue": "£125K", "Revenue_Numeric": 125000, "Margin": "28%", "Margin_Numeric": 28, "Efficiency": "94%", "Efficiency_Numeric": 94, "ROI": "320%", "Status": "🟢 Excellent"},
+        {"Store": "Mall Location", "Revenue": "£98K", "Revenue_Numeric": 98000, "Margin": "25%", "Margin_Numeric": 25, "Efficiency": "89%", "Efficiency_Numeric": 89, "ROI": "285%", "Status": "🟢 Good"},
+        {"Store": "Suburban", "Revenue": "£87K", "Revenue_Numeric": 87000, "Margin": "30%", "Margin_Numeric": 30, "Efficiency": "91%", "Efficiency_Numeric": 91, "ROI": "295%", "Status": "🟢 Good"},
+        {"Store": "Airport", "Revenue": "£156K", "Revenue_Numeric": 156000, "Margin": "22%", "Margin_Numeric": 22, "Efficiency": "85%", "Efficiency_Numeric": 85, "ROI": "245%", "Status": "🟡 Monitor"},
+        {"Store": "University", "Revenue": "£76K", "Revenue_Numeric": 76000, "Margin": "26%", "Margin_Numeric": 26, "Efficiency": "88%", "Efficiency_Numeric": 88, "ROI": "275%", "Status": "🟢 Good"}
     ])
     
     st.dataframe(

@@ -181,7 +181,7 @@ class PerformanceCalculator:
             "total_cost": KPI(
                 name="Total Inventory Cost",
                 value=total_cost,
-                unit="$",
+                unit="£",
                 category=MetricCategory.COST,
                 description=f"Total inventory costs over {days} days"
             ),
@@ -189,7 +189,7 @@ class PerformanceCalculator:
                 name="Average Order Cost",
                 value=avg_order_cost,
                 target=500.0,  # Target average order cost
-                unit="$",
+                unit="£",
                 category=MetricCategory.COST,
                 description="Average cost per order placed"
             ),
@@ -197,14 +197,14 @@ class PerformanceCalculator:
                 name="Cost per Unit Fulfilled",
                 value=cost_per_unit,
                 target=2.0,  # Target cost per unit
-                unit="$/unit",
+                unit="£/unit",
                 category=MetricCategory.COST,
                 description="Total cost divided by units fulfilled"
             ),
             "daily_holding_cost": KPI(
                 name="Daily Holding Cost",
                 value=daily_holding_cost,
-                unit="$/day",
+                unit="£/day",
                 category=MetricCategory.COST,
                 description="Estimated daily holding cost"
             )

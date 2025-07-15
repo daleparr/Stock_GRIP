@@ -12,7 +12,13 @@ class BusinessMetricsCalculator:
     """Calculate and format business-friendly metrics from technical data"""
     
     def __init__(self):
-        self.currency_symbol = "$"
+        try:
+            from config.localization import CURRENCY_SYMBOL, format_currency
+            self.currency_symbol = CURRENCY_SYMBOL
+            self.format_currency = format_currency
+        except ImportError:
+            self.currency_symbol = "$"
+            self.format_currency = lambda x: f"${x:,.2f}"
         self.percentage_format = "{:.1f}%"
         
     def calculate_financial_impact(self, technical_metrics: Dict) -> Dict:
