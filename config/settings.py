@@ -12,6 +12,28 @@ LOGS_DIR = BASE_DIR / "logs"
 # Database configuration
 DATABASE_URL = f"sqlite:///{DATA_DIR}/stock_grip.db"
 
+# Live Data Configuration
+LIVE_DATA_CONFIG = {
+    'data_directory': 'data/live_data/',
+    'supported_formats': ['csv'],
+    'max_file_size_mb': 100,
+    'required_columns': {
+        'product_performance': [
+            'date', 'product_id', 'product_name',
+            'shopify_units_sold', 'shopify_revenue'
+        ],
+        'marketing_attribution': [
+            'date', 'shopify_order_id', 'customer_email',
+            'total_attributed_revenue'
+        ]
+    },
+    'validation_rules': {
+        'min_products': 1,
+        'max_days_old': 90,
+        'required_revenue_fields': ['shopify_revenue', 'total_attributed_revenue']
+    }
+}
+
 # Optimization parameters
 GP_EIMS_CONFIG = {
     "max_iterations": 50,

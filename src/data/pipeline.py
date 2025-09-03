@@ -10,10 +10,69 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from .models import (
-    Product, Inventory, Demand, OptimizationParameters, 
+    Product, Inventory, Demand, OptimizationParameters,
     InventoryActions, PerformanceMetrics, get_session
 )
+from .live_data_processor import LiveDataProcessor
 from config.settings import SIMULATION_CONFIG
+
+
+class DataPipeline:
+    """Enhanced data pipeline supporting both synthetic and live data"""
+    
+    def __init__(self, session: Session, data_source: str = 'live'):
+        self.session = session
+        self.data_source = data_source  # 'live' or 'synthetic'
+        self.logger = logging.getLogger(__name__)
+        self.live_processor = None
+        
+    def load_data(self, file_path: str = None) -> Optional[pd.DataFrame]:
+        """Load data based on source type"""
+        if self.data_source == 'live':
+            return self.load_live_data(file_path)
+        else:
+            return self.load_synthetic_data()
+    
+    def load_live_data(self, file_path: str = None) -> Optional[pd.DataFrame]:
+        """Load data from Weld CSV exports"""
+        try:
+            if file_path:
+                self.live_processor = LiveDataProcessor(file_path)
+            else:
+                # Try to load from default directory
+                self.live_processor = LiveDataProcessor.load_live_data_from_directory()
+                
+            if self.live_processor and self.live_processor.load_data():
+                processed_data = self.live_processor.process_for_stock_grip()
+                self.logger.info(f"Loaded {len(processed_data)} products from live data")
+                return processed_data
+            else:
+                self.logger.error("Failed to load live data")
+                return None
+                
+        except Exception as e:
+            self.logger.error(f"Error loading live data: {str(e)}")
+            return None
+    
+    def load_synthetic_data(self) -> Optional[pd.DataFrame]:
+        """Load synthetic data (fallback for testing)"""
+        # This would use the existing synthetic data generation
+        # Keep for backward compatibility and testing
+        self.logger.info("Loading synthetic data (fallback mode)")
+        return None
+    
+    def validate_live_data_quality(self, df: pd.DataFrame) -> Dict[str, List[str]]:
+        """Validate live data meets Stock GRIP requirements"""
+        if self.live_processor:
+            issues = self.live_processor.validate_data()
+            return {"validation_issues": issues}
+        return {"validation_issues": ["No live data processor available"]}
+    
+    def get_optimization_summary(self) -> Optional[Dict[str, Any]]:
+        """Get optimization summary from live data"""
+        if self.live_processor:
+            return self.live_processor.get_optimization_summary()
+        return None
 
 
 class DataValidator:
@@ -23,6 +82,52 @@ class DataValidator:
         self.session = session
         self.logger = logging.getLogger(__name__)
     
+    def validate_live_data(self, df: pd.DataFrame) -> Dict[str, List[str]]:
+        """Validate live Weld data"""
+        issues = {
+            "missing_data": [],
+            "invalid_values": [],
+            "data_quality": []
+        }
+        
+        # Validate required columns
+        required_columns = [
+            'date', 'product_id', 'product_name', 'shopify_units_sold',
+            'shopify_revenue', 'total_attributed_revenue'
+        ]
+        missing_cols = [col for col in required_columns if col not in df.columns]
+        if missing_cols:
+            issues["missing_data"].extend(missing_cols)
+        
+        # Validate data types and values
+        try:
+            df['date'] = pd.to_datetime(df['date'])
+        except:
+            issues["invalid_values"].append("Invalid date format")
+        
+        # Check for negative values
+        numeric_cols = ['shopify_units_sold', 'shopify_revenue', 'total_attributed_revenue']
+        for col in numeric_cols:
+            if col in df.columns and (df[col] < 0).any():
+                issues["invalid_values"].append(f"Negative values in {col}")
+        
+        # Check for null values in critical fields
+        critical_fields = ['product_id', 'product_name']
+        for field in critical_fields:
+            if field in df.columns and df[field].isnull().any():
+                issues["data_quality"].append(f"Null values in {field}")
+        
+        # Data quality checks
+        if len(df) == 0:
+            issues["data_quality"].append("Empty dataset")
+        
+        if 'shopify_revenue' in df.columns and 'shopify_units_sold' in df.columns:
+            zero_revenue_with_sales = ((df['shopify_revenue'] == 0) & (df['shopify_units_sold'] > 0)).sum()
+            if zero_revenue_with_sales > 0:
+                issues["data_quality"].append(f"{zero_revenue_with_sales} products with sales but zero revenue")
+        
+        return issues
+
     def validate_product_data(self) -> Dict[str, List[str]]:
         """Validate product data integrity"""
         issues = {

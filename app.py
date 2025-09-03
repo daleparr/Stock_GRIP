@@ -33,6 +33,8 @@ except ImportError as e:
 
 try:
     from src.data.pipeline import DataPipeline
+    from src.data.live_data_processor import LiveDataProcessor
+    from src.optimization.live_data_optimizer import LiveDataOptimizer
 except ImportError as e:
     IMPORT_ERRORS.append(f"Data pipeline: {e}")
 
@@ -125,9 +127,9 @@ def main():
     
     # Navigation
     if SYSTEM_AVAILABLE and system:
-        page_options = ["Dashboard", "System Control", "Product Analysis", "Optimization Results", "Data Quality", "Settings"]
+        page_options = ["Dashboard", "Live Data Upload", "Live Data Analysis", "Live Optimization", "System Control", "Product Analysis", "Optimization Results", "Data Quality", "Settings"]
     else:
-        page_options = ["System Status", "Documentation", "Settings"]
+        page_options = ["System Status", "Live Data Upload", "Documentation", "Settings"]
     
     page = st.sidebar.selectbox("Navigate to:", page_options)
     
@@ -162,6 +164,12 @@ def main():
     # Main content based on selected page
     if page == "Dashboard":
         show_dashboard()
+    elif page == "Live Data Upload":
+        show_live_data_upload()
+    elif page == "Live Data Analysis":
+        show_live_data_analysis()
+    elif page == "Live Optimization":
+        show_live_optimization()
     elif page == "System Control":
         show_system_control(system)
     elif page == "Product Analysis":
@@ -856,6 +864,463 @@ def show_documentation():
         - Check the User Guide for operational procedures
         - Examine the source code for customization options
         """)
+
+
+def show_live_data_upload():
+    """Live data upload page"""
+    st.title("📊 Live Data Upload")
+    st.markdown("Upload your Weld-exported CSV files for live Stock GRIP testing")
+    
+    # File upload section
+    st.subheader("📁 Upload Data Files")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("**Product Performance Data**")
+        product_file = st.file_uploader(
+            "Upload Product Performance CSV",
+            type=['csv'],
+            key="product_performance",
+            help="Export from your Weld Product_Performance_Aggregated model"
+        )
+        
+        if product_file:
+            st.success(f"✅ File uploaded: {product_file.name}")
+            st.info(f"File size: {product_file.size:,} bytes")
+    
+    with col2:
+        st.markdown("**Marketing Attribution Data (Optional)**")
+        attribution_file = st.file_uploader(
+            "Upload Marketing Attribution CSV",
+            type=['csv'],
+            key="marketing_attribution",
+            help="Export from your Weld Marketing_Attribution_Model"
+        )
+        
+        if attribution_file:
+            st.success(f"✅ File uploaded: {attribution_file.name}")
+            st.info(f"File size: {attribution_file.size:,} bytes")
+    
+    # Process uploaded files
+    if product_file:
+        if st.button("🚀 Process Live Data", type="primary"):
+            with st.spinner("Processing live data..."):
+                try:
+                    # Save uploaded file temporarily
+                    import tempfile
+                    import os
+                    
+                    with tempfile.NamedTemporaryFile(mode='wb', suffix='.csv', delete=False) as tmp_file:
+                        tmp_file.write(product_file.getvalue())
+                        temp_path = tmp_file.name
+                    
+                    # Process with LiveDataProcessor
+                    processor = LiveDataProcessor(temp_path)
+                    
+                    if processor.load_data():
+                        # Validate data
+                        issues = processor.validate_data()
+                        if issues:
+                            st.warning("⚠️ Data validation issues found:")
+                            for issue in issues:
+                                st.text(f"• {issue}")
+                        else:
+                            st.success("✅ Data validation passed")
+                        
+                        # Process for Stock GRIP
+                        processed_data = processor.process_for_stock_grip()
+                        st.success(f"✅ Processed {len(processed_data)} products")
+                        
+                        # Store in session state
+                        st.session_state['live_processor'] = processor
+                        st.session_state['live_data_processed'] = True
+                        
+                        # Display summary
+                        summary = processor.get_optimization_summary()
+                        
+                        col1, col2, col3, col4 = st.columns(4)
+                        
+                        with col1:
+                            st.metric("Total Products", summary['total_products'])
+                        
+                        with col2:
+                            st.metric("Total Revenue", f"£{summary['total_revenue']:,.2f}")
+                        
+                        with col3:
+                            st.metric("High Performers", summary['high_performers'])
+                        
+                        with col4:
+                            st.metric("Email Responsive", summary['email_responsive_products'])
+                        
+                        # Data preview
+                        st.subheader("📋 Data Preview")
+                        st.dataframe(processed_data.head(10), use_container_width=True)
+                        
+                    else:
+                        st.error("❌ Failed to load data")
+                    
+                    # Clean up temp file
+                    os.unlink(temp_path)
+                    
+                except Exception as e:
+                    st.error(f"❌ Error processing data: {str(e)}")
+    else:
+        st.info("👆 Please upload a Product Performance CSV file to get started")
+
+
+def show_live_data_analysis():
+    """Live data analysis page"""
+    st.title("🔴 Live Data Analysis")
+    st.markdown("Analysis of your uploaded Weld data")
+    
+    # Check if data is loaded
+    if 'live_processor' not in st.session_state:
+        st.warning("⚠️ No live data loaded. Please upload data first.")
+        if st.button("📊 Go to Upload Page"):
+            st.session_state.page = "Live Data Upload"
+            st.rerun()
+        return
+    
+    processor = st.session_state['live_processor']
+    
+    try:
+        # Get summary data
+        summary = processor.get_optimization_summary()
+        processed_data = processor.processed_data
+        
+        # Key metrics dashboard
+        st.subheader("📈 Key Performance Metrics")
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric(
+                "Total Revenue",
+                f"£{summary['total_revenue']:,.2f}",
+                delta=f"{summary['total_products']} products"
+            )
+        
+        with col2:
+            st.metric(
+                "Units Sold",
+                f"{summary['total_units_sold']:,}",
+                delta=f"£{summary['avg_unit_price']:.2f} avg price"
+            )
+        
+        with col3:
+            st.metric(
+                "Marketing ROAS",
+                f"{summary['overall_marketing_roas']:.2f}x",
+                delta=f"£{summary['total_marketing_spend']:,.0f} spend"
+            )
+        
+        with col4:
+            st.metric(
+                "Organic Share",
+                f"{summary['organic_revenue_share']:.1%}",
+                delta="of total revenue"
+            )
+        
+        # Charts section
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("🏆 Top Products by Revenue")
+            top_products = processed_data.nlargest(10, 'revenue')[['product_name', 'revenue', 'demand_velocity']]
+            fig = px.bar(
+                top_products,
+                x='revenue',
+                y='product_name',
+                orientation='h',
+                title="Revenue by Product",
+                labels={'revenue': 'Revenue (£)', 'product_name': 'Product'}
+            )
+            fig.update_layout(height=400)
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with col2:
+            st.subheader("📊 Category Performance")
+            category_performance = processed_data.groupby('category_clean').agg({
+                'revenue': 'sum',
+                'demand_velocity': 'sum'
+            }).reset_index()
+            
+            fig = px.pie(
+                category_performance,
+                values='revenue',
+                names='category_clean',
+                title="Revenue by Category"
+            )
+            fig.update_layout(height=400)
+            st.plotly_chart(fig, use_container_width=True)
+        
+        # Detailed analysis
+        st.subheader("📋 Product Performance Analysis")
+        
+        # Performance filters
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            category_filter = st.selectbox(
+                "Filter by Category",
+                options=['All'] + list(processed_data['category_clean'].unique())
+            )
+        
+        with col2:
+            performance_filter = st.selectbox(
+                "Filter by Performance",
+                options=['All', 'High Performers', 'Marketing Driven', 'Email Responsive']
+            )
+        
+        with col3:
+            sort_by = st.selectbox(
+                "Sort by",
+                options=['Revenue', 'Units Sold', 'Marketing Efficiency', 'Organic Ratio']
+            )
+        
+        # Apply filters
+        filtered_data = processed_data.copy()
+        
+        if category_filter != 'All':
+            filtered_data = filtered_data[filtered_data['category_clean'] == category_filter]
+        
+        if performance_filter == 'High Performers':
+            filtered_data = filtered_data[filtered_data['high_performer'] == 1]
+        elif performance_filter == 'Marketing Driven':
+            filtered_data = filtered_data[filtered_data['marketing_driven'] == 1]
+        elif performance_filter == 'Email Responsive':
+            filtered_data = filtered_data[filtered_data['email_responsive'] == 1]
+        
+        # Sort data
+        sort_column_map = {
+            'Revenue': 'revenue',
+            'Units Sold': 'demand_velocity',
+            'Marketing Efficiency': 'marketing_efficiency',
+            'Organic Ratio': 'organic_ratio'
+        }
+        
+        filtered_data = filtered_data.sort_values(
+            sort_column_map[sort_by],
+            ascending=False
+        )
+        
+        # Display filtered data
+        display_columns = [
+            'product_name', 'category_clean', 'revenue', 'demand_velocity',
+            'marketing_efficiency', 'organic_ratio', 'high_performer',
+            'marketing_driven', 'email_responsive'
+        ]
+        
+        st.dataframe(
+            filtered_data[display_columns].head(20),
+            use_container_width=True,
+            column_config={
+                'revenue': st.column_config.NumberColumn('Revenue', format='£%.2f'),
+                'marketing_efficiency': st.column_config.NumberColumn('Marketing ROAS', format='%.2f'),
+                'organic_ratio': st.column_config.NumberColumn('Organic %', format='%.1%'),
+                'high_performer': st.column_config.CheckboxColumn('High Performer'),
+                'marketing_driven': st.column_config.CheckboxColumn('Marketing Driven'),
+                'email_responsive': st.column_config.CheckboxColumn('Email Responsive')
+            }
+        )
+        
+        # Insights section
+        st.subheader("💡 Key Insights")
+        
+        insights = []
+        
+        if summary['high_performers'] > 0:
+            insights.append(f"🏆 {summary['high_performers']} high-performing products generating significant revenue")
+        
+        if summary['email_responsive_products'] == summary['total_products']:
+            insights.append("📧 All products show email marketing responsiveness - strong Klaviyo performance")
+        
+        if summary['organic_revenue_share'] > 0.7:
+            insights.append("🌱 Strong organic performance indicates good product-market fit")
+        
+        if summary['overall_marketing_roas'] > 2.0:
+            insights.append(f"💰 Excellent marketing ROI at {summary['overall_marketing_roas']:.1f}x - consider scaling")
+        
+        for insight in insights:
+            st.success(insight)
+        
+    except Exception as e:
+        st.error(f"❌ Error analyzing data: {str(e)}")
+
+
+def show_live_optimization():
+    """Live optimization page"""
+    st.title("🎯 Live Optimization")
+    st.markdown("Run Stock GRIP optimization with your live data")
+    
+    # Check if data is loaded
+    if 'live_processor' not in st.session_state:
+        st.warning("⚠️ No live data loaded. Please upload data first.")
+        if st.button("📊 Go to Upload Page"):
+            st.session_state.page = "Live Data Upload"
+            st.rerun()
+        return
+    
+    processor = st.session_state['live_processor']
+    
+    # Optimization controls
+    st.subheader("🚀 Optimization Controls")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("🧠 Run GP-EIMS Strategic Optimization", type="primary"):
+            with st.spinner("Running strategic optimization..."):
+                try:
+                    optimizer = LiveDataOptimizer(processor)
+                    
+                    if optimizer.initialize_optimization_data():
+                        gp_results = optimizer.run_gp_eims_optimization()
+                        st.session_state['gp_results'] = gp_results
+                        st.success("✅ GP-EIMS optimization completed!")
+                        
+                        # Display top recommendations
+                        st.subheader("🎯 Strategic Recommendations")
+                        
+                        results_df = pd.DataFrame.from_dict(gp_results, orient='index')
+                        results_df = results_df.sort_values('expected_improvement', ascending=False)
+                        
+                        st.dataframe(
+                            results_df[['product_name', 'recommendation', 'priority', 'expected_improvement', 'confidence']].head(10),
+                            use_container_width=True,
+                            column_config={
+                                'expected_improvement': st.column_config.NumberColumn('Expected Improvement', format='%.2f'),
+                                'confidence': st.column_config.NumberColumn('Confidence', format='%.1%')
+                            }
+                        )
+                    else:
+                        st.error("❌ Failed to initialize optimization data")
+                        
+                except Exception as e:
+                    st.error(f"❌ Strategic optimization failed: {str(e)}")
+    
+    with col2:
+        if st.button("⚡ Run MPC-RL-MOBO Tactical Optimization"):
+            with st.spinner("Running tactical optimization..."):
+                try:
+                    optimizer = LiveDataOptimizer(processor)
+                    
+                    if optimizer.initialize_optimization_data():
+                        mpc_results = optimizer.run_mpc_rl_mobo_optimization()
+                        st.session_state['mpc_results'] = mpc_results
+                        st.success("✅ MPC-RL-MOBO optimization completed!")
+                        
+                        # Display tactical actions
+                        st.subheader("⚡ Tactical Actions")
+                        
+                        results_df = pd.DataFrame.from_dict(mpc_results, orient='index')
+                        results_df = results_df.sort_values('optimization_confidence', ascending=False)
+                        
+                        st.dataframe(
+                            results_df[['action', 'urgency', 'recommended_stock_level', 'optimization_confidence']].head(10),
+                            use_container_width=True,
+                            column_config={
+                                'recommended_stock_level': st.column_config.NumberColumn('Recommended Stock', format='%.0f'),
+                                'optimization_confidence': st.column_config.NumberColumn('Confidence', format='%.1%')
+                            }
+                        )
+                    else:
+                        st.error("❌ Failed to initialize optimization data")
+                        
+                except Exception as e:
+                    st.error(f"❌ Tactical optimization failed: {str(e)}")
+    
+    # Unified recommendations
+    if 'gp_results' in st.session_state and 'mpc_results' in st.session_state:
+        st.subheader("🎯 Unified Recommendations")
+        
+        try:
+            optimizer = LiveDataOptimizer(processor)
+            optimizer.optimization_results = {
+                'gp_eims': st.session_state['gp_results'],
+                'mpc_rl_mobo': st.session_state['mpc_results']
+            }
+            
+            unified = optimizer.generate_unified_recommendations()
+            insights = optimizer.get_portfolio_insights()
+            
+            # Top recommendations
+            top_recs = optimizer.get_top_recommendations(5)
+            
+            st.markdown("**Top 5 Optimization Recommendations:**")
+            
+            for i, (product_id, rec) in enumerate(top_recs.items(), 1):
+                with st.expander(f"{i}. {rec['product_name']} - {rec['strategic_recommendation'].replace('_', ' ').title()}"):
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.write(f"**Strategic:** {rec['strategic_recommendation'].replace('_', ' ').title()}")
+                        st.write(f"**Priority:** {rec['priority'].title()}")
+                        st.write(f"**Expected Improvement:** £{rec['expected_improvement']:.2f}")
+                    
+                    with col2:
+                        st.write(f"**Tactical:** {rec['tactical_action'].replace('_', ' ').title()}")
+                        st.write(f"**Urgency:** {rec['urgency'].title()}")
+                        st.write(f"**Confidence:** {rec['overall_confidence']:.1%}")
+            
+            # Portfolio insights
+            st.subheader("📊 Portfolio Insights")
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.metric(
+                    "Portfolio Health",
+                    f"{insights['portfolio_health']['performance_rate']:.1%}",
+                    delta=f"{insights['portfolio_health']['high_performers']} high performers"
+                )
+            
+            with col2:
+                st.metric(
+                    "Marketing ROI",
+                    f"{insights['revenue_analysis']['marketing_roas']:.2f}x",
+                    delta=f"£{insights['revenue_analysis']['total_revenue']:,.0f} revenue"
+                )
+            
+            with col3:
+                st.metric(
+                    "Email Effectiveness",
+                    f"{insights['channel_effectiveness']['email_responsive_rate']:.1%}",
+                    delta="products responsive"
+                )
+            
+        except Exception as e:
+            st.error(f"❌ Error generating unified recommendations: {str(e)}")
+    
+    # Export results
+    if 'gp_results' in st.session_state or 'mpc_results' in st.session_state:
+        st.subheader("📥 Export Results")
+        
+        if st.button("📊 Export Optimization Results"):
+            try:
+                optimizer = LiveDataOptimizer(processor)
+                if 'gp_results' in st.session_state:
+                    optimizer.optimization_results['gp_eims'] = st.session_state['gp_results']
+                if 'mpc_results' in st.session_state:
+                    optimizer.optimization_results['mpc_rl_mobo'] = st.session_state['mpc_results']
+                
+                results_df = optimizer.export_optimization_results()
+                
+                # Convert to CSV
+                csv = results_df.to_csv(index=False)
+                
+                st.download_button(
+                    label="📥 Download Results CSV",
+                    data=csv,
+                    file_name=f"stock_grip_optimization_results_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                    mime="text/csv"
+                )
+                
+                st.success("✅ Results ready for download!")
+                
+            except Exception as e:
+                st.error(f"❌ Error exporting results: {str(e)}")
 
 
 if __name__ == "__main__":

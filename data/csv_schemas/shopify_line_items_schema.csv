@@ -1,0 +1,10 @@
+shopify_line_item_id,shopify_order_id,product_id,variant_id,sku,title,variant_title,vendor,quantity,price,total_discount,weight,requires_shipping,taxable,fulfillment_service,fulfillment_status
+li_1001,5234567890123,PER-0001,var_001,COFFEE-PREM-250G,Premium Organic Coffee,250g Beans,Artisan Roasters,2,24.99,5.00,0.25,true,true,manual,fulfilled
+li_1002,5234567890123,PER-0002,var_002,MUG-CERAMIC-001,Ceramic Coffee Mug,Blue,Kitchen Essentials,1,14.99,0.00,0.35,true,true,manual,fulfilled
+li_1003,5234567890124,FOO-0001,var_003,TEA-GREEN-100G,Organic Green Tea,100g Loose Leaf,Tea Masters,3,15.50,0.00,0.10,true,true,manual,partial
+li_1004,5234567890124,PER-0003,var_004,HONEY-RAW-500G,Raw Wildflower Honey,500g Jar,Local Apiaries,1,22.00,0.00,0.50,true,false,manual,partial
+li_1005,5234567890125,PER-0004,var_005,SERUM-VITAMIN-C,Vitamin C Face Serum,30ml,Glow Skincare,1,89.99,10.00,0.05,true,true,manual,fulfilled
+li_1006,5234567890125,PER-0005,var_006,MOISTURIZER-NIGHT,Night Moisturizer,50ml,Glow Skincare,1,65.00,0.00,0.08,true,true,manual,fulfilled
+li_1007,5234567890126,HOU-0001,var_007,CANDLE-SOY-VANILLA,Soy Wax Candle,Vanilla Scent,Home Comfort,2,18.99,2.00,0.30,true,true,manual,unfulfilled
+li_1008,5234567890127,FOO-0002,var_008,CHOCOLATE-DARK-70,Dark Chocolate Bar,70% Cocoa,Artisan Chocolates,3,8.50,0.00,0.10,true,false,manual,fulfilled
+li_1009,5234567890127,PER-0006,var_009,SHAMPOO-ORGANIC,Organic Shampoo,250ml,Natural Care,1,16.99,0.00,0.25,true,true,manual,fulfilled
