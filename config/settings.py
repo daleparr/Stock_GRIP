@@ -34,6 +34,15 @@ LIVE_DATA_CONFIG = {
     }
 }
 
+# Dashboard configuration
+DASHBOARD_CONFIG = {
+    "title": "Stock_GRIP - Inventory Optimization",
+    "theme": "default",
+    "layout": "wide",
+    "sidebar_state": "expanded",
+    "page_icon": "📦"
+}
+
 # Optimization parameters
 GP_EIMS_CONFIG = {
     "max_iterations": 50,

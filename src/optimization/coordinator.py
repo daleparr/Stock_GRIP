@@ -12,10 +12,49 @@ from sqlalchemy.orm import Session
 from .gp_eims import GPEIMSOptimizer
 from .mpc_rl_mobo import MPCRLMOBOController
 from ..data.models import (
-    Product, OptimizationParameters, OptimizationResults, 
+    Product, OptimizationParameters, OptimizationResults,
     PerformanceMetrics, get_session
 )
-from config.settings import GP_EIMS_CONFIG, MPC_RL_CONFIG, DATABASE_URL
+
+# Import configurations with fallbacks
+try:
+    from config.settings import GP_EIMS_CONFIG
+except ImportError:
+    GP_EIMS_CONFIG = {
+        "max_iterations": 50,
+        "acquisition_function": "EI",
+        "kernel": "RBF",
+        "noise_variance": 0.01,
+        "optimization_interval_days": 7,
+        "kernel_bounds": {
+            "constant_value": (1e-5, 1e5),
+            "length_scale": (1e-3, 1e3),
+        },
+        "n_restarts_optimizer": 10,
+        "optimizer": "fmin_l_bfgs_b",
+        "max_iter": 1000,
+        "n_candidates": 20,
+        "normalize_y": True,
+        "warning_suppression": True,
+    }
+
+try:
+    from config.settings import MPC_RL_CONFIG
+except ImportError:
+    MPC_RL_CONFIG = {
+        "prediction_horizon": 7,
+        "control_horizon": 3,
+        "learning_rate": 0.001,
+        "discount_factor": 0.95,
+        "exploration_rate": 0.1,
+        "batch_size": 32,
+        "memory_size": 10000,
+    }
+
+try:
+    from config.settings import DATABASE_URL
+except ImportError:
+    DATABASE_URL = "sqlite:///data/stock_grip.db"
 
 
 class OptimizationCoordinator:

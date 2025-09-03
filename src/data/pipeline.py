@@ -14,7 +14,21 @@ from .models import (
     InventoryActions, PerformanceMetrics, get_session
 )
 from .live_data_processor import LiveDataProcessor
-from config.settings import SIMULATION_CONFIG
+
+# Import SIMULATION_CONFIG with fallback
+try:
+    from config.settings import SIMULATION_CONFIG
+except ImportError:
+    # Fallback configuration
+    SIMULATION_CONFIG = {
+        "num_products": 50,
+        "simulation_days": 365,
+        "warehouse_capacity": 100000,
+        "service_level_target": 0.95,
+        "holding_cost_rate": 0.25,
+        "stockout_penalty": 10.0,
+        "order_cost": 50.0,
+    }
 
 
 class DataPipeline:

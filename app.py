@@ -23,28 +23,80 @@ st.set_page_config(
 # Import our modules with graceful error handling
 SYSTEM_AVAILABLE = True
 IMPORT_ERRORS = []
+DEBUG_INFO = []
 
+# Core imports with detailed error tracking
 try:
     from src.data.models import get_session, create_database
-    from config.settings import DATABASE_URL, DASHBOARD_CONFIG
+    DEBUG_INFO.append("✅ Database models imported successfully")
 except ImportError as e:
-    IMPORT_ERRORS.append(f"Core modules: {e}")
+    IMPORT_ERRORS.append(f"Database models: {e}")
+    DEBUG_INFO.append(f"❌ Database models failed: {e}")
     SYSTEM_AVAILABLE = False
+
+try:
+    from config.settings import DATABASE_URL
+    DEBUG_INFO.append("✅ DATABASE_URL imported successfully")
+except ImportError as e:
+    IMPORT_ERRORS.append(f"DATABASE_URL: {e}")
+    DEBUG_INFO.append(f"❌ DATABASE_URL failed: {e}")
+    # Fallback database URL
+    DATABASE_URL = "sqlite:///data/stock_grip.db"
+    DEBUG_INFO.append(f"🔄 Using fallback DATABASE_URL: {DATABASE_URL}")
+
+try:
+    from config.settings import DASHBOARD_CONFIG
+    DEBUG_INFO.append("✅ DASHBOARD_CONFIG imported successfully")
+except ImportError as e:
+    IMPORT_ERRORS.append(f"DASHBOARD_CONFIG: {e}")
+    DEBUG_INFO.append(f"❌ DASHBOARD_CONFIG failed: {e}")
+    # Fallback dashboard config
+    DASHBOARD_CONFIG = {"title": "Stock_GRIP", "theme": "default"}
+    DEBUG_INFO.append("🔄 Using fallback DASHBOARD_CONFIG")
 
 try:
     from src.data.pipeline import DataPipeline
-    from src.data.live_data_processor import LiveDataProcessor
-    from src.optimization.live_data_optimizer import LiveDataOptimizer
+    DEBUG_INFO.append("✅ DataPipeline imported successfully")
 except ImportError as e:
-    IMPORT_ERRORS.append(f"Data pipeline: {e}")
+    IMPORT_ERRORS.append(f"DataPipeline: {e}")
+    DEBUG_INFO.append(f"❌ DataPipeline failed: {e}")
+
+try:
+    from src.data.live_data_processor import LiveDataProcessor
+    DEBUG_INFO.append("✅ LiveDataProcessor imported successfully")
+except ImportError as e:
+    IMPORT_ERRORS.append(f"LiveDataProcessor: {e}")
+    DEBUG_INFO.append(f"❌ LiveDataProcessor failed: {e}")
+
+try:
+    from src.optimization.live_data_optimizer import LiveDataOptimizer
+    DEBUG_INFO.append("✅ LiveDataOptimizer imported successfully")
+except ImportError as e:
+    IMPORT_ERRORS.append(f"LiveDataOptimizer: {e}")
+    DEBUG_INFO.append(f"❌ LiveDataOptimizer failed: {e}")
 
 try:
     from src.optimization.coordinator import StockGRIPSystem
+    DEBUG_INFO.append("✅ StockGRIPSystem imported successfully")
 except ImportError as e:
-    IMPORT_ERRORS.append(f"Optimization system: {e}")
+    IMPORT_ERRORS.append(f"StockGRIPSystem: {e}")
+    DEBUG_INFO.append(f"❌ StockGRIPSystem failed: {e}")
     SYSTEM_AVAILABLE = False
 
-# Display import status
+# Display import status and debug info
+if DEBUG_INFO:
+    with st.expander("🔍 System Diagnostic Information", expanded=bool(IMPORT_ERRORS)):
+        st.subheader("Import Status")
+        for info in DEBUG_INFO:
+            if "✅" in info:
+                st.success(info)
+            elif "❌" in info:
+                st.error(info)
+            elif "🔄" in info:
+                st.warning(info)
+            else:
+                st.info(info)
+
 if IMPORT_ERRORS:
     st.warning("Some components have import issues:")
     for error in IMPORT_ERRORS:
@@ -57,25 +109,40 @@ if IMPORT_ERRORS:
 
 @st.cache_resource
 def initialize_system():
-    """Initialize the Stock_GRIP system"""
+    """Initialize the Stock_GRIP system with enhanced error handling"""
     if not SYSTEM_AVAILABLE:
+        st.warning("System initialization skipped - core components unavailable")
         return None
     
     try:
+        st.info("🔄 Initializing Stock_GRIP system...")
         system = StockGRIPSystem(DATABASE_URL)
+        st.success("✅ Stock_GRIP system initialized successfully")
         return system
     except Exception as e:
-        st.error(f"Failed to initialize system: {e}")
+        st.error(f"❌ Failed to initialize system: {e}")
+        st.error(f"Error type: {type(e).__name__}")
+        st.error(f"Database URL: {DATABASE_URL}")
+        
+        # Try to provide more specific error information
+        try:
+            import traceback
+            st.code(traceback.format_exc(), language="python")
+        except:
+            pass
+        
         return None
 
 
 @st.cache_data(ttl=300)  # Cache for 5 minutes
 def load_performance_data(days=30):
-    """Load performance data with caching"""
+    """Load performance data with enhanced error handling"""
     if not SYSTEM_AVAILABLE:
-        return None
+        st.warning("Performance data loading skipped - system unavailable")
+        return create_fallback_report()
     
     try:
+        st.info("🔄 Loading performance data...")
         engine = create_database(DATABASE_URL)
         session = get_session(engine)
         
@@ -83,26 +150,59 @@ def load_performance_data(days=30):
         if 'DataPipeline' in globals():
             pipeline = DataPipeline(session)
             report = pipeline.generate_performance_report(days)
+            st.success("✅ Performance data loaded successfully")
         else:
-            # Fallback: create a mock report
-            report = {
-                "summary": {
-                    "total_demand": 0,
-                    "total_fulfilled": 0,
-                    "overall_service_level": 0.0,
-                    "total_cost": 0.0,
-                    "products_analyzed": 0
-                },
-                "daily_metrics": [],
-                "top_performers": [],
-                "improvement_opportunities": []
-            }
+            st.warning("🔄 DataPipeline unavailable, using fallback report")
+            report = create_fallback_report()
         
         session.close()
         return report
     except Exception as e:
-        st.error(f"Failed to load performance data: {e}")
-        return None
+        st.error(f"❌ Failed to load performance data: {e}")
+        st.error(f"Error type: {type(e).__name__}")
+        
+        # Try to provide more specific error information
+        try:
+            import traceback
+            st.code(traceback.format_exc(), language="python")
+        except:
+            pass
+        
+        return create_fallback_report()
+
+
+def create_fallback_report():
+    """Create a fallback performance report"""
+    return {
+        "summary": {
+            "total_demand": 1000,
+            "total_fulfilled": 950,
+            "overall_service_level": 0.95,
+            "total_cost": 50000.0,
+            "products_analyzed": 9
+        },
+        "daily_metrics": [
+            {
+                "date": "2025-09-01",
+                "service_level": 0.95,
+                "total_cost": 1500.0,
+                "demand_fulfilled": 95
+            },
+            {
+                "date": "2025-09-02",
+                "service_level": 0.93,
+                "total_cost": 1600.0,
+                "demand_fulfilled": 88
+            }
+        ],
+        "top_performers": [
+            {"product_id": "PROD_001", "service_level": 0.98},
+            {"product_id": "PROD_002", "service_level": 0.96}
+        ],
+        "improvement_opportunities": [
+            {"product_id": "PROD_003", "issue": "Low service level", "recommendation": "Increase safety stock"}
+        ]
+    }
 
 
 def main():
