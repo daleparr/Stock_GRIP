@@ -633,10 +633,21 @@ class DataPipeline:
                 product_performance = self.aggregator.aggregate_product_performance(days)
                 if product_performance is None or len(product_performance) == 0:
                     # Create empty DataFrame with required columns
-                    product_performance = pd.DataFrame(columns=["service_level"])
+                    product_performance = pd.DataFrame(columns=[
+                        "product_id", "category", "total_demand", "total_fulfilled",
+                        "avg_demand", "service_level", "total_actions", "total_ordered",
+                        "total_cost", "current_stock", "available_stock"
+                    ])
+                elif "service_level" not in product_performance.columns:
+                    # Add missing service_level column if it doesn't exist
+                    product_performance["service_level"] = 0.0
             except Exception as e:
                 self.logger.warning(f"Failed to aggregate product performance: {e}")
-                product_performance = pd.DataFrame(columns=["service_level"])
+                product_performance = pd.DataFrame(columns=[
+                    "product_id", "category", "total_demand", "total_fulfilled",
+                    "avg_demand", "service_level", "total_actions", "total_ordered",
+                    "total_cost", "current_stock", "available_stock"
+                ])
             
             # Overall metrics with safe calculations
             total_demand = sum(d.get("total_demand", 0) for d in daily_metrics)
@@ -644,6 +655,19 @@ class DataPipeline:
             service_levels = [d.get("service_level", 0.0) for d in daily_metrics if d.get("service_level") is not None]
             avg_service_level = np.mean(service_levels) if service_levels else 0.0
             total_cost = sum(d.get("total_cost", 0.0) for d in daily_metrics)
+            
+            # Safe DataFrame operations
+            product_records = []
+            top_performers = []
+            improvement_opportunities = []
+            
+            if len(product_performance) > 0 and "service_level" in product_performance.columns:
+                product_records = product_performance.to_dict("records")
+                top_performers = product_performance.nlargest(10, "service_level").to_dict("records")
+                improvement_opportunities = product_performance.nsmallest(10, "service_level").to_dict("records")
+            elif len(product_performance) > 0:
+                # DataFrame exists but no service_level column
+                product_records = product_performance.to_dict("records")
             
             report = {
                 "report_period_days": days,
@@ -656,9 +680,9 @@ class DataPipeline:
                     "products_analyzed": len(product_performance)
                 },
                 "daily_metrics": daily_metrics,
-                "product_performance": product_performance.to_dict("records") if len(product_performance) > 0 else [],
-                "top_performers": product_performance.nlargest(10, "service_level").to_dict("records") if len(product_performance) > 0 else [],
-                "improvement_opportunities": product_performance.nsmallest(10, "service_level").to_dict("records") if len(product_performance) > 0 else []
+                "product_performance": product_records,
+                "top_performers": top_performers,
+                "improvement_opportunities": improvement_opportunities
             }
             
             self.logger.info("Performance report generated successfully")
