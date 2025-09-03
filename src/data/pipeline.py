@@ -600,43 +600,88 @@ class DataPipeline:
         return feature_matrix
     
     def generate_performance_report(self, days: int = 30) -> Dict[str, Any]:
-        """Generate comprehensive performance report"""
+        """Generate comprehensive performance report with error handling"""
         self.logger.info(f"Generating performance report for last {days} days...")
         
-        # Daily aggregation
-        daily_metrics = []
-        for i in range(days):
-            date = (datetime.utcnow() - timedelta(days=i)).date()
-            daily_metric = self.aggregator.aggregate_daily_metrics(date)
-            daily_metrics.append(daily_metric)
-        
-        # Product performance
-        product_performance = self.aggregator.aggregate_product_performance(days)
-        
-        # Overall metrics
-        total_demand = sum(d["total_demand"] for d in daily_metrics)
-        total_fulfilled = sum(d["total_fulfilled"] for d in daily_metrics)
-        avg_service_level = np.mean([d["service_level"] for d in daily_metrics])
-        total_cost = sum(d["total_cost"] for d in daily_metrics)
-        
-        report = {
-            "report_period_days": days,
-            "generated_at": datetime.utcnow(),
-            "summary": {
-                "total_demand": total_demand,
-                "total_fulfilled": total_fulfilled,
-                "overall_service_level": avg_service_level,
-                "total_cost": total_cost,
-                "products_analyzed": len(product_performance)
-            },
-            "daily_metrics": daily_metrics,
-            "product_performance": product_performance.to_dict("records"),
-            "top_performers": product_performance.nlargest(10, "service_level").to_dict("records"),
-            "improvement_opportunities": product_performance.nsmallest(10, "service_level").to_dict("records")
-        }
-        
-        self.logger.info("Performance report generated successfully")
-        return report
+        try:
+            # Daily aggregation with error handling
+            daily_metrics = []
+            for i in range(days):
+                date = (datetime.utcnow() - timedelta(days=i)).date()
+                try:
+                    daily_metric = self.aggregator.aggregate_daily_metrics(date)
+                    # Ensure all required keys exist
+                    if "service_level" not in daily_metric:
+                        daily_metric["service_level"] = 0.0
+                    daily_metrics.append(daily_metric)
+                except Exception as e:
+                    self.logger.warning(f"Failed to aggregate metrics for {date}: {e}")
+                    # Add fallback daily metric
+                    daily_metrics.append({
+                        "date": date,
+                        "total_demand": 0,
+                        "total_fulfilled": 0,
+                        "service_level": 0.0,
+                        "total_actions": 0,
+                        "total_quantity_ordered": 0,
+                        "total_cost": 0.0,
+                        "demand_records": 0
+                    })
+            
+            # Product performance with error handling
+            try:
+                product_performance = self.aggregator.aggregate_product_performance(days)
+                if product_performance is None or len(product_performance) == 0:
+                    # Create empty DataFrame with required columns
+                    product_performance = pd.DataFrame(columns=["service_level"])
+            except Exception as e:
+                self.logger.warning(f"Failed to aggregate product performance: {e}")
+                product_performance = pd.DataFrame(columns=["service_level"])
+            
+            # Overall metrics with safe calculations
+            total_demand = sum(d.get("total_demand", 0) for d in daily_metrics)
+            total_fulfilled = sum(d.get("total_fulfilled", 0) for d in daily_metrics)
+            service_levels = [d.get("service_level", 0.0) for d in daily_metrics if d.get("service_level") is not None]
+            avg_service_level = np.mean(service_levels) if service_levels else 0.0
+            total_cost = sum(d.get("total_cost", 0.0) for d in daily_metrics)
+            
+            report = {
+                "report_period_days": days,
+                "generated_at": datetime.utcnow(),
+                "summary": {
+                    "total_demand": total_demand,
+                    "total_fulfilled": total_fulfilled,
+                    "overall_service_level": avg_service_level,
+                    "total_cost": total_cost,
+                    "products_analyzed": len(product_performance)
+                },
+                "daily_metrics": daily_metrics,
+                "product_performance": product_performance.to_dict("records") if len(product_performance) > 0 else [],
+                "top_performers": product_performance.nlargest(10, "service_level").to_dict("records") if len(product_performance) > 0 else [],
+                "improvement_opportunities": product_performance.nsmallest(10, "service_level").to_dict("records") if len(product_performance) > 0 else []
+            }
+            
+            self.logger.info("Performance report generated successfully")
+            return report
+            
+        except Exception as e:
+            self.logger.error(f"Failed to generate performance report: {e}")
+            # Return fallback report
+            return {
+                "report_period_days": days,
+                "generated_at": datetime.utcnow(),
+                "summary": {
+                    "total_demand": 0,
+                    "total_fulfilled": 0,
+                    "overall_service_level": 0.0,
+                    "total_cost": 0.0,
+                    "products_analyzed": 0
+                },
+                "daily_metrics": [],
+                "product_performance": [],
+                "top_performers": [],
+                "improvement_opportunities": []
+            }
     
     def run_full_pipeline(self) -> Dict[str, Any]:
         """Run complete data pipeline"""
