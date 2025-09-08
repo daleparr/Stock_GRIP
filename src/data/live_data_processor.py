@@ -49,10 +49,17 @@ class LiveDataProcessor:
             
         issues = []
         
-        # Check required columns
+        # Check required columns (minimal set for unified CSV)
         required_columns = [
-            'date', 'product_id', 'product_name', 'shopify_units_sold', 
-            'shopify_revenue', 'total_attributed_revenue', 'organic_revenue'
+            'date', 'product_id', 'product_name', 'shopify_units_sold',
+            'shopify_revenue'
+        ]
+        
+        # Optional columns (will use defaults if missing)
+        optional_columns = [
+            'total_attributed_revenue', 'organic_revenue', 'klaviyo_emails_sent',
+            'klaviyo_emails_opened', 'facebook_impressions', 'facebook_clicks',
+            'current_inventory_level', 'available_inventory', 'reorder_point'
         ]
         
         missing_cols = [col for col in required_columns if col not in self.data.columns]
@@ -93,7 +100,7 @@ class LiveDataProcessor:
         processed['unit_price'] = processed.get('shopify_avg_selling_price', 
                                                processed['shopify_revenue'] / processed['shopify_units_sold'].replace(0, 1))
         
-        # Marketing efficiency metrics
+        # Enhanced Marketing Attribution Metrics (Phase 1 Optimization)
         processed['marketing_spend'] = processed.get('total_marketing_spend', 0).fillna(0)
         processed['attributed_revenue'] = processed.get('total_attributed_revenue', 0).fillna(0)
         processed['marketing_efficiency'] = np.where(
@@ -109,31 +116,48 @@ class LiveDataProcessor:
             0
         )
         
-        # Safe Facebook ROAS calculation
+        # Enhanced Facebook ROAS with standardized 7-day attribution window
         facebook_spend = processed.get('facebook_spend', pd.Series([0] * len(processed)))
         if isinstance(facebook_spend, pd.Series):
             facebook_spend = facebook_spend.fillna(0)
         else:
             facebook_spend = pd.Series([0] * len(processed))
-            
-        processed['facebook_roas'] = np.where(
+        
+        # Prioritize 7-day attribution window for Facebook
+        facebook_7d_revenue = processed.get('facebook_7d_attributed_revenue',
+                                          processed.get('facebook_attributed_revenue', 0))
+        processed['facebook_roas_7d'] = np.where(
             facebook_spend > 0,
-            processed.get('facebook_attributed_revenue', 0) / facebook_spend,
+            facebook_7d_revenue / facebook_spend,
             0
         )
         
-        # Safe email efficiency calculation
+        # Keep legacy facebook_roas for backward compatibility
+        processed['facebook_roas'] = processed['facebook_roas_7d']
+        
+        # Enhanced Email efficiency with 3-day attribution window
         klaviyo_emails = processed.get('klaviyo_emails_sent', pd.Series([0] * len(processed)))
         if isinstance(klaviyo_emails, pd.Series):
             klaviyo_emails = klaviyo_emails.fillna(0)
         else:
             klaviyo_emails = pd.Series([0] * len(processed))
-            
-        processed['email_efficiency'] = np.where(
+        
+        # Prioritize 3-day attribution for email campaigns
+        klaviyo_3d_revenue = processed.get('klaviyo_3d_attributed_revenue',
+                                         processed.get('klaviyo_attributed_revenue', 0))
+        processed['email_efficiency_3d'] = np.where(
             klaviyo_emails > 0,
-            processed.get('klaviyo_attributed_revenue', 0) / klaviyo_emails,
+            klaviyo_3d_revenue / klaviyo_emails,
             0
         )
+        
+        # Keep legacy email_efficiency for backward compatibility
+        processed['email_efficiency'] = processed['email_efficiency_3d']
+        
+        # Marketing channel performance flags
+        processed['high_facebook_roas'] = (processed['facebook_roas_7d'] > 2.0).astype(int)
+        processed['high_email_efficiency'] = (processed['email_efficiency_3d'] > 0.5).astype(int)
+        processed['strong_organic'] = (processed['organic_ratio'] > 0.7).astype(int)
         
         # Product categorization
         processed['category_clean'] = processed.get('product_category', 'other').fillna('other')
@@ -154,9 +178,9 @@ class LiveDataProcessor:
             include_lowest=True
         )
         
-        # Stock GRIP optimization flags
+        # Enhanced Stock GRIP optimization flags with marketing intelligence
         processed['high_performer'] = (
-            (processed['demand_velocity'] >= 2) & 
+            (processed['demand_velocity'] >= 2) &
             (processed['revenue'] >= 150)
         ).astype(int)
         
@@ -167,6 +191,43 @@ class LiveDataProcessor:
         processed['email_responsive'] = (
             processed.get('klaviyo_attributed_revenue', 0) > 0
         ).astype(int)
+        
+        # New marketing performance flags for inventory prioritization
+        processed['facebook_star'] = (
+            (processed['facebook_roas_7d'] > 3.0) &
+            (processed['demand_velocity'] > 1)
+        ).astype(int)
+        
+        processed['email_champion'] = (
+            (processed['email_efficiency_3d'] > 1.0) &
+            (processed['email_responsive'] == 1)
+        ).astype(int)
+        
+        processed['organic_winner'] = (
+            (processed['organic_ratio'] > 0.8) &
+            (processed['demand_velocity'] > 2)
+        ).astype(int)
+        
+        # Campaign coordination flags (placeholder for future campaign calendar integration)
+        processed['has_upcoming_campaign'] = 0  # Will be enhanced in Phase 2
+        processed['campaign_priority'] = 'none'  # Will be enhanced in Phase 2
+        
+        # Marketing channel mix classification
+        def classify_marketing_mix(row):
+            if row['facebook_star'] and row['email_champion']:
+                return 'multi_channel_star'
+            elif row['facebook_star']:
+                return 'facebook_focused'
+            elif row['email_champion']:
+                return 'email_focused'
+            elif row['organic_winner']:
+                return 'organic_focused'
+            elif row['marketing_driven']:
+                return 'marketing_dependent'
+            else:
+                return 'low_marketing_impact'
+        
+        processed['marketing_mix_type'] = processed.apply(classify_marketing_mix, axis=1)
         
         self.processed_data = processed
         return processed
@@ -194,6 +255,21 @@ class LiveDataProcessor:
             'high_performers': self.processed_data['high_performer'].sum(),
             'marketing_driven_products': self.processed_data['marketing_driven'].sum(),
             'email_responsive_products': self.processed_data['email_responsive'].sum(),
+            
+            # Enhanced marketing performance metrics (Phase 1)
+            'facebook_stars': self.processed_data['facebook_star'].sum(),
+            'email_champions': self.processed_data['email_champion'].sum(),
+            'organic_winners': self.processed_data['organic_winner'].sum(),
+            'multi_channel_stars': len(self.processed_data[self.processed_data['marketing_mix_type'] == 'multi_channel_star']),
+            
+            # Attribution window specific metrics
+            'avg_facebook_roas_7d': self.processed_data['facebook_roas_7d'].mean(),
+            'avg_email_efficiency_3d': self.processed_data['email_efficiency_3d'].mean(),
+            'high_facebook_roas_products': self.processed_data['high_facebook_roas'].sum(),
+            'high_email_efficiency_products': self.processed_data['high_email_efficiency'].sum(),
+            
+            # Marketing mix distribution
+            'marketing_mix_distribution': self.processed_data['marketing_mix_type'].value_counts().to_dict(),
             'top_categories': self.processed_data['category_clean'].value_counts().to_dict(),
             'demand_distribution': self.processed_data['demand_category'].value_counts().to_dict()
         }

@@ -1230,6 +1230,46 @@ def show_live_data_analysis():
                 delta="of total revenue"
             )
         
+        # Enhanced marketing attribution metrics (Phase 1)
+        st.subheader("📱 Enhanced Marketing Attribution (7d FB / 3d Email)")
+        
+        col1, col2, col3, col4, col5 = st.columns(5)
+        
+        with col1:
+            st.metric(
+                "📱 Facebook Stars",
+                summary.get('facebook_stars', 0),
+                delta="ROAS > 3.0x"
+            )
+        
+        with col2:
+            st.metric(
+                "📧 Email Champions",
+                summary.get('email_champions', 0),
+                delta="Efficiency > £1.0"
+            )
+        
+        with col3:
+            st.metric(
+                "🌟 Multi-Channel",
+                summary.get('multi_channel_stars', 0),
+                delta="FB + Email stars"
+            )
+        
+        with col4:
+            st.metric(
+                "📊 Avg FB ROAS 7d",
+                f"{summary.get('avg_facebook_roas_7d', 0):.2f}x",
+                delta="7-day attribution"
+            )
+        
+        with col5:
+            st.metric(
+                "💌 Avg Email Eff 3d",
+                f"£{summary.get('avg_email_efficiency_3d', 0):.2f}",
+                delta="3-day attribution"
+            )
+        
         # Charts section
         col1, col2 = st.columns(2)
         
@@ -1313,15 +1353,19 @@ def show_live_data_analysis():
             ascending=False
         )
         
-        # Display filtered data
+        # Enhanced display with marketing attribution flags (Phase 1)
         display_columns = [
             'product_name', 'category_clean', 'revenue', 'demand_velocity',
             'marketing_efficiency', 'organic_ratio', 'high_performer',
-            'marketing_driven', 'email_responsive'
+            'marketing_driven', 'email_responsive', 'facebook_star',
+            'email_champion', 'organic_winner', 'marketing_mix_type'
         ]
         
+        # Only include columns that exist in the dataframe
+        available_display_columns = [col for col in display_columns if col in filtered_data.columns]
+        
         st.dataframe(
-            filtered_data[display_columns].head(20),
+            filtered_data[available_display_columns].head(20),
             use_container_width=True,
             column_config={
                 'revenue': st.column_config.NumberColumn('Revenue', format='£%.2f'),
@@ -1329,12 +1373,16 @@ def show_live_data_analysis():
                 'organic_ratio': st.column_config.NumberColumn('Organic %', format='%.1%'),
                 'high_performer': st.column_config.CheckboxColumn('High Performer'),
                 'marketing_driven': st.column_config.CheckboxColumn('Marketing Driven'),
-                'email_responsive': st.column_config.CheckboxColumn('Email Responsive')
+                'email_responsive': st.column_config.CheckboxColumn('Email Responsive'),
+                'facebook_star': st.column_config.CheckboxColumn('📱 FB Star'),
+                'email_champion': st.column_config.CheckboxColumn('📧 Email Champ'),
+                'organic_winner': st.column_config.CheckboxColumn('🌱 Organic Win'),
+                'marketing_mix_type': st.column_config.TextColumn('Marketing Mix')
             }
         )
         
-        # Insights section
-        st.subheader("💡 Key Insights")
+        # Enhanced insights section with marketing attribution (Phase 1)
+        st.subheader("💡 Key Insights & Marketing Attribution")
         
         insights = []
         
@@ -1349,6 +1397,30 @@ def show_live_data_analysis():
         
         if summary['overall_marketing_roas'] > 2.0:
             insights.append(f"💰 Excellent marketing ROI at {summary['overall_marketing_roas']:.1f}x - consider scaling")
+        
+        # Enhanced marketing attribution insights (Phase 1)
+        if summary.get('facebook_stars', 0) > 0:
+            insights.append(f"📱 {summary['facebook_stars']} Facebook star products with ROAS > 3.0x - prioritize for inventory")
+        
+        if summary.get('email_champions', 0) > 0:
+            insights.append(f"📧 {summary['email_champions']} email champion products with efficiency > £1.0 - coordinate campaigns with inventory")
+        
+        if summary.get('multi_channel_stars', 0) > 0:
+            insights.append(f"🌟 {summary['multi_channel_stars']} multi-channel star products - highest inventory priority")
+        
+        if summary.get('avg_facebook_roas_7d', 0) > 2.5:
+            insights.append(f"🎯 Strong Facebook performance (avg {summary['avg_facebook_roas_7d']:.1f}x ROAS) - ensure adequate stock for campaigns")
+        
+        if summary.get('avg_email_efficiency_3d', 0) > 0.75:
+            insights.append(f"💌 Excellent email efficiency (avg £{summary['avg_email_efficiency_3d']:.2f}) - coordinate email sends with inventory levels")
+        
+        # Marketing mix insights
+        if 'marketing_mix_distribution' in summary:
+            mix_dist = summary['marketing_mix_distribution']
+            if mix_dist.get('multi_channel_star', 0) > 0:
+                insights.append(f"⭐ {mix_dist['multi_channel_star']} products excel across multiple channels - premium inventory treatment")
+            if mix_dist.get('organic_focused', 0) > mix_dist.get('marketing_dependent', 0):
+                insights.append("🌱 Portfolio leans organic - strong brand equity, lower demand volatility expected")
         
         for insight in insights:
             st.success(insight)
@@ -1583,10 +1655,24 @@ def show_six_week_reorder_dashboard():
         else:
             st.warning("⚠️ No SKU field found, using product_id as fallback")
         
-        # Calculate 6-week inventory metrics
+        # Phase 2: Marketing-Inventory Integration
+        try:
+            from src.optimization.marketing_inventory_integration import MarketingInventoryIntegrator
+            marketing_integrator = MarketingInventoryIntegrator()
+            
+            # Apply marketing-adjusted demand forecasting and safety stock optimization
+            marketing_optimized_data = marketing_integrator.generate_marketing_driven_reorder_recommendations(processed_data)
+            st.info("✅ Using Phase 2 Marketing-Inventory Integration for enhanced recommendations")
+            use_marketing_integration = True
+        except Exception as e:
+            st.warning(f"⚠️ Marketing integration unavailable, using standard calculations: {str(e)}")
+            marketing_optimized_data = processed_data
+            use_marketing_integration = False
+        
+        # Calculate 6-week inventory metrics with marketing integration
         reorder_analysis = []
         
-        for _, row in processed_data.iterrows():
+        for _, row in marketing_optimized_data.iterrows():
             # Get actual SKU from dataset
             sku = row.get('product_sku', row['product_id'])
             
@@ -1640,18 +1726,56 @@ def show_six_week_reorder_dashboard():
             unit_price = row['shopify_revenue'] / max(row['shopify_units_sold'], 1)
             revenue_at_risk = max(0, (reorder_point - available_stock)) * unit_price if available_stock < reorder_point else 0
             
-            # ACCURATE recommended order calculation using REAL inventory
-            safety_buffer = daily_sales_rate * safety_days
-            total_needed = six_week_demand + safety_buffer
-            recommended_order = max(0, int(total_needed - available_stock))
+            # Phase 2: Marketing-optimized reorder calculation
+            if use_marketing_integration and 'marketing_optimized_reorder' in row:
+                # Use marketing-adjusted recommendations
+                recommended_order = int(row['marketing_optimized_reorder'])
+                calculation_method = "Marketing-Optimized"
+                
+                # Get marketing-specific metrics if available
+                marketing_priority = row.get('marketing_priority', 'MEDIUM')
+                demand_confidence = row.get('demand_forecast_confidence', 0.7)
+                channel_safety_days = row.get('channel_adjusted_safety_days', safety_days)
+                
+            else:
+                # Fallback to standard calculation
+                safety_buffer = daily_sales_rate * safety_days
+                total_needed = six_week_demand + safety_buffer
+                recommended_order = max(0, int(total_needed - available_stock))
+                calculation_method = "Standard"
+                marketing_priority = "MEDIUM"
+                demand_confidence = 0.7
+                channel_safety_days = safety_days
+                
+                # Prevent massive overstock
+                if recommended_order > (daily_sales_rate * 90):  # More than 90 days of stock
+                    recommended_order = max(0, int(daily_sales_rate * 60))  # Cap at 60 days
             
-            # Prevent massive overstock
-            if recommended_order > (daily_sales_rate * 90):  # More than 90 days of stock
-                recommended_order = max(0, int(daily_sales_rate * 60))  # Cap at 60 days
+            # Enhanced marketing attribution indicators (Phase 1)
+            marketing_indicators = []
+            if row.get('facebook_star', 0) == 1:
+                marketing_indicators.append('📱')
+            if row.get('email_champion', 0) == 1:
+                marketing_indicators.append('📧')
+            if row.get('organic_winner', 0) == 1:
+                marketing_indicators.append('🌱')
+            if row.get('high_facebook_roas', 0) == 1:
+                marketing_indicators.append('🎯')
+            if row.get('high_email_efficiency', 0) == 1:
+                marketing_indicators.append('💌')
+            
+            marketing_flags = ' '.join(marketing_indicators) if marketing_indicators else ''
+            
+            # Marketing mix classification for better insights
+            marketing_mix = row.get('marketing_mix_type', 'unknown')
+            
+            # Enhanced product name with marketing indicators
+            product_display = f"{row['product_name']} {marketing_flags}".strip()
             
             reorder_analysis.append({
                 'SKU': sku,
-                'Product': row['product_name'],
+                'Product': product_display,
+                'Marketing Mix': marketing_mix,
                 'Current Stock': current_stock,
                 'Available Stock': available_stock,
                 'Daily Sales': round(daily_sales_rate, 1),
@@ -1664,7 +1788,17 @@ def show_six_week_reorder_dashboard():
                 '6-Week Demand': round(six_week_demand, 1),
                 'Recommended Order': recommended_order,
                 'Data Source': data_source,
-                'Reorder Point': reorder_point
+                'Reorder Point': reorder_point,
+                'Facebook ROAS 7d': round(row.get('facebook_roas_7d', 0), 2),
+                'Email Efficiency 3d': round(row.get('email_efficiency_3d', 0), 2),
+                
+                # Phase 2: Marketing-Inventory Integration metrics
+                'Calculation Method': calculation_method,
+                'Marketing Priority': marketing_priority,
+                'Demand Confidence': round(demand_confidence, 2),
+                'Channel Safety Days': round(channel_safety_days, 1),
+                'Campaign Flag': '🎯' if row.get('has_upcoming_campaign', 0) == 1 else '',
+                'Marketing Revenue Opp': round(row.get('marketing_revenue_opportunity', 0), 0)
             })
         
         df = pd.DataFrame(reorder_analysis)
@@ -1678,7 +1812,7 @@ def show_six_week_reorder_dashboard():
         if estimated_count > 0:
             st.warning(f"⚠️ Using ESTIMATED inventory for {estimated_count} products")
         
-        # Key metrics row
+        # Enhanced key metrics row with marketing attribution (Phase 1)
         col1, col2, col3, col4 = st.columns(4)
         
         urgent_count = len(df[df['Priority'] == 'URGENT'])
@@ -1697,6 +1831,112 @@ def show_six_week_reorder_dashboard():
         
         with col4:
             st.metric("🛒 Total Reorder Units", f"{total_reorder_value:,.0f}", delta="Recommended order quantity")
+        
+        # Phase 2: Marketing-Inventory Integration Summary
+        if use_marketing_integration:
+            st.subheader("🚀 Phase 2: Marketing-Inventory Integration")
+            
+            # Calculate Phase 2 specific metrics
+            marketing_optimized_count = len(df[df.get('Calculation Method', '') == 'Marketing-Optimized'])
+            high_marketing_priority = len(df[df.get('Marketing Priority', '') == 'HIGH'])
+            campaign_flagged = len(df[df.get('Campaign Flag', '') == '🎯'])
+            avg_demand_confidence = df.get('Demand Confidence', pd.Series([0.7])).mean()
+            total_marketing_revenue_opp = df.get('Marketing Revenue Opp', pd.Series([0])).sum()
+            
+            col1, col2, col3, col4, col5 = st.columns(5)
+            
+            with col1:
+                st.metric("🧠 Marketing-Optimized", marketing_optimized_count, delta="AI-enhanced calculations")
+            
+            with col2:
+                st.metric("⭐ High Marketing Priority", high_marketing_priority, delta="Channel stars")
+            
+            with col3:
+                st.metric("🎯 Campaign Flagged", campaign_flagged, delta="Upcoming campaigns")
+            
+            with col4:
+                st.metric("📊 Avg Confidence", f"{avg_demand_confidence:.1%}", delta="Demand forecast")
+            
+            with col5:
+                st.metric("💰 Marketing Revenue Opp", f"£{total_marketing_revenue_opp:,.0f}", delta="Channel optimization")
+        
+        # Marketing Performance Summary (Phase 1 Enhancement)
+        st.subheader("📱 Marketing Attribution Summary")
+        
+        # Calculate marketing performance metrics
+        facebook_stars = len(df[df.get('Facebook ROAS 7d', pd.Series([0])) > 3.0])
+        email_champions = len(df[df.get('Email Efficiency 3d', pd.Series([0])) > 1.0])
+        multi_channel = len(df[df.get('Marketing Mix', pd.Series([''])) == 'multi_channel_star'])
+        avg_facebook_roas = df.get('Facebook ROAS 7d', pd.Series([0])).mean()
+        avg_email_efficiency = df.get('Email Efficiency 3d', pd.Series([0])).mean()
+        
+        col1, col2, col3, col4, col5 = st.columns(5)
+        
+        with col1:
+            st.metric("📱 Facebook Stars", facebook_stars, delta="ROAS > 3.0x")
+        
+        with col2:
+            st.metric("📧 Email Champions", email_champions, delta="Efficiency > £1.0")
+        
+        with col3:
+            st.metric("🌟 Multi-Channel", multi_channel, delta="Facebook + Email stars")
+        
+        with col4:
+            st.metric("📊 Avg FB ROAS", f"{avg_facebook_roas:.2f}x", delta="7-day attribution")
+        
+        with col5:
+            st.metric("💌 Avg Email Eff", f"£{avg_email_efficiency:.2f}", delta="3-day attribution")
+        
+        # Marketing mix distribution
+        if 'Marketing Mix' in df.columns:
+            st.subheader("🎯 Marketing Mix Distribution")
+            marketing_mix_counts = df['Marketing Mix'].value_counts()
+            
+            if len(marketing_mix_counts) > 0:
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    # Marketing mix pie chart
+                    fig_mix = px.pie(
+                        values=marketing_mix_counts.values,
+                        names=marketing_mix_counts.index,
+                        title="Products by Marketing Channel Focus",
+                        color_discrete_map={
+                            'multi_channel_star': '#FFD700',
+                            'facebook_focused': '#4267B2',
+                            'email_focused': '#00B2A9',
+                            'organic_focused': '#28a745',
+                            'marketing_dependent': '#ffc107',
+                            'low_marketing_impact': '#6c757d'
+                        }
+                    )
+                    st.plotly_chart(fig_mix, use_container_width=True)
+                
+                with col2:
+                    # Marketing performance by mix type
+                    if len(df) > 0:
+                        mix_performance = df.groupby('Marketing Mix').agg({
+                            'Revenue at Risk': 'sum',
+                            'Recommended Order': 'sum'
+                        }).reset_index()
+                        
+                        fig_perf = px.bar(
+                            mix_performance,
+                            x='Marketing Mix',
+                            y='Revenue at Risk',
+                            title="Revenue at Risk by Marketing Mix",
+                            color='Marketing Mix',
+                            color_discrete_map={
+                                'multi_channel_star': '#FFD700',
+                                'facebook_focused': '#4267B2',
+                                'email_focused': '#00B2A9',
+                                'organic_focused': '#28a745',
+                                'marketing_dependent': '#ffc107',
+                                'low_marketing_impact': '#6c757d'
+                            }
+                        )
+                        fig_perf.update_layout(xaxis_tickangle=45)
+                        st.plotly_chart(fig_perf, use_container_width=True)
         
         # Priority matrix
         st.subheader("🎯 Reorder Priority Matrix")
@@ -1725,22 +1965,38 @@ def show_six_week_reorder_dashboard():
             else:
                 return 'background-color: #66cc66'
         
-        # Display styled dataframe with enhanced columns
-        display_columns = ['SKU', 'Product', 'Priority', 'Stockout Risk', 'Overstock Risk',
+        # Enhanced display columns with marketing attribution (Phase 1)
+        display_columns = ['SKU', 'Product', 'Marketing Mix', 'Priority', 'Stockout Risk', 'Overstock Risk',
                           'Current Stock', 'Available Stock', 'Days Until Stockout',
-                          'Confidence', 'Revenue at Risk', 'Recommended Order', 'Data Source']
+                          'Confidence', 'Revenue at Risk', 'Recommended Order', 'Data Source',
+                          'Facebook ROAS 7d', 'Email Efficiency 3d']
         
         # Only include columns that exist in the dataframe
         available_columns = [col for col in display_columns if col in df_sorted.columns]
         
+        # Enhanced styling with marketing mix colors
+        def color_marketing_mix(val):
+            color_map = {
+                'multi_channel_star': 'background-color: #FFD700; color: black',  # Gold
+                'facebook_focused': 'background-color: #4267B2; color: white',    # Facebook blue
+                'email_focused': 'background-color: #00B2A9; color: white',       # Klaviyo teal
+                'organic_focused': 'background-color: #28a745; color: white',     # Green
+                'marketing_dependent': 'background-color: #ffc107; color: black', # Yellow
+                'low_marketing_impact': 'background-color: #6c757d; color: white' # Gray
+            }
+            return color_map.get(val, '')
+        
         styled_df = df_sorted[available_columns].style.applymap(
             color_priority, subset=['Priority']
-        ).applymap(color_risk, subset=['Stockout Risk', 'Overstock Risk']).format({
+        ).applymap(color_risk, subset=['Stockout Risk', 'Overstock Risk']
+        ).applymap(color_marketing_mix, subset=['Marketing Mix']).format({
             'Revenue at Risk': '£{:,.0f}',
             'Days Until Stockout': '{:.1f}',
             'Recommended Order': '{:,.0f}',
             'Current Stock': '{:,.0f}',
-            'Available Stock': '{:,.0f}'
+            'Available Stock': '{:,.0f}',
+            'Facebook ROAS 7d': '{:.2f}x',
+            'Email Efficiency 3d': '£{:.2f}'
         })
         
         st.dataframe(styled_df, use_container_width=True)
