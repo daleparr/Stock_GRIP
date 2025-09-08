@@ -109,16 +109,29 @@ class LiveDataProcessor:
             0
         )
         
-        # Channel performance
+        # Safe Facebook ROAS calculation
+        facebook_spend = processed.get('facebook_spend', pd.Series([0] * len(processed)))
+        if isinstance(facebook_spend, pd.Series):
+            facebook_spend = facebook_spend.fillna(0)
+        else:
+            facebook_spend = pd.Series([0] * len(processed))
+            
         processed['facebook_roas'] = np.where(
-            processed.get('facebook_spend', 0) > 0,
-            processed.get('facebook_attributed_revenue', 0) / processed['facebook_spend'],
+            facebook_spend > 0,
+            processed.get('facebook_attributed_revenue', 0) / facebook_spend,
             0
         )
         
+        # Safe email efficiency calculation
+        klaviyo_emails = processed.get('klaviyo_emails_sent', pd.Series([0] * len(processed)))
+        if isinstance(klaviyo_emails, pd.Series):
+            klaviyo_emails = klaviyo_emails.fillna(0)
+        else:
+            klaviyo_emails = pd.Series([0] * len(processed))
+            
         processed['email_efficiency'] = np.where(
-            processed.get('klaviyo_emails_sent', 0) > 0,
-            processed.get('klaviyo_attributed_revenue', 0) / processed['klaviyo_emails_sent'],
+            klaviyo_emails > 0,
+            processed.get('klaviyo_attributed_revenue', 0) / klaviyo_emails,
             0
         )
         
