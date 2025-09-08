@@ -323,7 +323,7 @@ def main():
     
     # Navigation
     if SYSTEM_AVAILABLE and system:
-        page_options = ["Dashboard", "Live Data Upload", "Live Data Analysis", "Live Optimization", "System Control", "Product Analysis", "Optimization Results", "Data Quality", "Settings"]
+        page_options = ["Dashboard", "6-Week Reorder Dashboard", "Live Data Upload", "Live Data Analysis", "Live Optimization", "System Control", "Product Analysis", "Optimization Results", "Data Quality", "Settings"]
     else:
         page_options = ["System Status", "Live Data Upload", "Documentation", "Settings"]
     
@@ -360,6 +360,8 @@ def main():
     # Main content based on selected page
     if page == "Dashboard":
         show_dashboard()
+    elif page == "6-Week Reorder Dashboard":
+        show_six_week_reorder_dashboard()
     elif page == "Live Data Upload":
         show_live_data_upload()
     elif page == "Live Data Analysis":
@@ -1527,6 +1529,189 @@ def show_live_optimization():
                 
             except Exception as e:
                 st.error(f"❌ Error exporting results: {str(e)}")
+
+
+def show_six_week_reorder_dashboard():
+    """6-Week Lead Time Reorder Dashboard for stakeholder decision making"""
+    st.title("📅 6-Week Reorder Dashboard")
+    st.markdown("**Strategic inventory decisions with 6-week lead time optimization**")
+    
+    # Business context
+    st.info("🎯 **Business Context**: 6-week lead time for restocking | Avoid stockouts while preventing 30+ day overstock")
+    
+    try:
+        # Load live data
+        live_data_path = "data/live_data/stock_grip_product_performace_aggregated_03_09_2025_11_30.csv"
+        
+        if not os.path.exists(live_data_path):
+            st.error("Live data not found. Please upload data first.")
+            return
+        
+        # Process live data
+        live_processor = LiveDataProcessor(live_data_path)
+        if not live_processor.load_data():
+            st.error("Failed to load live data")
+            return
+        
+        processed_data = live_processor.process_for_stock_grip()
+        
+        # Calculate 6-week inventory metrics
+        reorder_analysis = []
+        
+        for _, row in processed_data.iterrows():
+            # Current metrics
+            current_stock = int(row['shopify_units_sold'] * 2)  # Estimated current stock
+            daily_sales_rate = row['shopify_units_sold'] / 30  # Daily sales rate
+            
+            # 6-week projections
+            days_until_stockout = current_stock / max(daily_sales_rate, 0.1)
+            six_week_demand = daily_sales_rate * 42  # 6 weeks = 42 days
+            
+            # Risk calculations
+            stockout_risk = "HIGH" if days_until_stockout < 42 else "MEDIUM" if days_until_stockout < 60 else "LOW"
+            overstock_risk = "HIGH" if days_until_stockout > 72 else "LOW"  # 30+ days after 6-week restock
+            
+            # Confidence based on sales velocity
+            confidence = "HIGH" if row['shopify_units_sold'] > 50 else "MEDIUM" if row['shopify_units_sold'] > 10 else "LOW"
+            
+            # Reorder priority
+            if stockout_risk == "HIGH":
+                priority = "URGENT"
+            elif stockout_risk == "MEDIUM" and overstock_risk == "LOW":
+                priority = "HIGH"
+            elif stockout_risk == "LOW" and overstock_risk == "LOW":
+                priority = "MEDIUM"
+            else:
+                priority = "LOW"
+            
+            # Revenue impact
+            revenue_at_risk = six_week_demand * (row['shopify_revenue'] / max(row['shopify_units_sold'], 1))
+            
+            reorder_analysis.append({
+                'SKU': row['product_id'],
+                'Product': row['product_name'],
+                'Current Stock': current_stock,
+                'Daily Sales': round(daily_sales_rate, 1),
+                'Days Until Stockout': round(days_until_stockout, 1),
+                'Stockout Risk': stockout_risk,
+                'Overstock Risk': overstock_risk,
+                'Priority': priority,
+                'Confidence': confidence,
+                'Revenue at Risk': revenue_at_risk,
+                '6-Week Demand': round(six_week_demand, 1),
+                'Recommended Order': max(0, round(six_week_demand - current_stock + (daily_sales_rate * 14), 0))  # +2 weeks buffer
+            })
+        
+        df = pd.DataFrame(reorder_analysis)
+        
+        # Key metrics row
+        col1, col2, col3, col4 = st.columns(4)
+        
+        urgent_count = len(df[df['Priority'] == 'URGENT'])
+        high_risk_revenue = df[df['Stockout Risk'] == 'HIGH']['Revenue at Risk'].sum()
+        overstock_count = len(df[df['Overstock Risk'] == 'HIGH'])
+        total_reorder_value = df['Recommended Order'].sum()
+        
+        with col1:
+            st.metric("🚨 Urgent Reorders", urgent_count, delta="SKUs need immediate action")
+        
+        with col2:
+            st.metric("💰 Revenue at Risk", f"£{high_risk_revenue:,.0f}", delta="From potential stockouts")
+        
+        with col3:
+            st.metric("📦 Overstock Risk", overstock_count, delta="SKUs with excess inventory")
+        
+        with col4:
+            st.metric("🛒 Total Reorder Units", f"{total_reorder_value:,.0f}", delta="Recommended order quantity")
+        
+        # Priority matrix
+        st.subheader("🎯 Reorder Priority Matrix")
+        
+        # Filter and sort by priority
+        priority_order = {'URGENT': 4, 'HIGH': 3, 'MEDIUM': 2, 'LOW': 1}
+        df['Priority_Score'] = df['Priority'].map(priority_order)
+        df_sorted = df.sort_values(['Priority_Score', 'Revenue at Risk'], ascending=[False, False])
+        
+        # Color coding function
+        def color_priority(val):
+            if val == 'URGENT':
+                return 'background-color: #ff4444; color: white'
+            elif val == 'HIGH':
+                return 'background-color: #ff8800; color: white'
+            elif val == 'MEDIUM':
+                return 'background-color: #ffaa00; color: black'
+            else:
+                return 'background-color: #88cc88; color: black'
+        
+        def color_risk(val):
+            if val == 'HIGH':
+                return 'background-color: #ff6666'
+            elif val == 'MEDIUM':
+                return 'background-color: #ffcc66'
+            else:
+                return 'background-color: #66cc66'
+        
+        # Display styled dataframe
+        styled_df = df_sorted[['SKU', 'Product', 'Priority', 'Stockout Risk', 'Overstock Risk',
+                              'Days Until Stockout', 'Confidence', 'Revenue at Risk', 'Recommended Order']].style.applymap(
+            color_priority, subset=['Priority']
+        ).applymap(color_risk, subset=['Stockout Risk', 'Overstock Risk']).format({
+            'Revenue at Risk': '£{:,.0f}',
+            'Days Until Stockout': '{:.1f}',
+            'Recommended Order': '{:,.0f}'
+        })
+        
+        st.dataframe(styled_df, use_container_width=True)
+        
+        # Charts
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("📊 Stockout Risk Distribution")
+            risk_counts = df['Stockout Risk'].value_counts()
+            fig_risk = px.pie(values=risk_counts.values, names=risk_counts.index,
+                             title="SKUs by Stockout Risk Level",
+                             color_discrete_map={'HIGH': '#ff4444', 'MEDIUM': '#ffaa00', 'LOW': '#88cc88'})
+            st.plotly_chart(fig_risk, use_container_width=True)
+        
+        with col2:
+            st.subheader("💰 Revenue Risk Analysis")
+            fig_revenue = px.bar(df_sorted.head(10), x='SKU', y='Revenue at Risk',
+                               title="Top 10 SKUs by Revenue at Risk",
+                               color='Priority',
+                               color_discrete_map={'URGENT': '#ff4444', 'HIGH': '#ff8800',
+                                                 'MEDIUM': '#ffaa00', 'LOW': '#88cc88'})
+            fig_revenue.update_xaxis(tickangle=45)
+            st.plotly_chart(fig_revenue, use_container_width=True)
+        
+        # Action recommendations
+        st.subheader("🎯 Immediate Action Items")
+        
+        urgent_items = df[df['Priority'] == 'URGENT']
+        if len(urgent_items) > 0:
+            st.error(f"🚨 **{len(urgent_items)} SKUs require URGENT reordering:**")
+            for _, item in urgent_items.iterrows():
+                st.write(f"• **{item['Product']}** - {item['Days Until Stockout']:.1f} days until stockout | Order {item['Recommended Order']:,.0f} units")
+        
+        high_items = df[df['Priority'] == 'HIGH']
+        if len(high_items) > 0:
+            st.warning(f"⚠️ **{len(high_items)} SKUs need HIGH priority reordering:**")
+            for _, item in high_items.head(5).iterrows():
+                st.write(f"• **{item['Product']}** - {item['Days Until Stockout']:.1f} days until stockout | Order {item['Recommended Order']:,.0f} units")
+        
+        # Download recommendations
+        st.subheader("📥 Export Recommendations")
+        csv = df_sorted.to_csv(index=False)
+        st.download_button(
+            label="📊 Download Reorder Recommendations CSV",
+            data=csv,
+            file_name=f"6_week_reorder_recommendations_{datetime.now().strftime('%Y%m%d')}.csv",
+            mime="text/csv"
+        )
+        
+    except Exception as e:
+        st.error(f"Error generating reorder dashboard: {e}")
+        st.error("Please ensure the system is initialized with live data first.")
 
 
 if __name__ == "__main__":
