@@ -1540,20 +1540,28 @@ def show_six_week_reorder_dashboard():
     st.info("🎯 **Business Context**: 6-week lead time for restocking | Avoid stockouts while preventing 30+ day overstock")
     
     try:
-        # Load live data
-        live_data_path = "data/live_data/stock_grip_product_performace_aggregated_03_09_2025_11_30.csv"
-        
-        if not os.path.exists(live_data_path):
-            st.error("Live data not found. Please upload data first.")
-            return
-        
-        # Process live data
-        live_processor = LiveDataProcessor(live_data_path)
-        if not live_processor.load_data():
-            st.error("Failed to load live data")
-            return
-        
-        processed_data = live_processor.process_for_stock_grip()
+        # Check for live data in session state first
+        if 'live_processor' in st.session_state and st.session_state.get('live_data_processed', False):
+            st.success("✅ Using uploaded live data from session")
+            live_processor = st.session_state['live_processor']
+            processed_data = live_processor.process_for_stock_grip()
+        else:
+            # Fallback to file system
+            live_data_path = "data/live_data/stock_grip_product_performace_aggregated_03_09_2025_11_30.csv"
+            
+            if not os.path.exists(live_data_path):
+                st.error("❌ No live data found. Please upload data using the 'Live Data Upload' page first.")
+                st.info("💡 Go to 'Live Data Upload' → Upload your Weld CSV → Process Live Data → Return here")
+                return
+            
+            st.info("📁 Using default live data file")
+            # Process live data from file
+            live_processor = LiveDataProcessor(live_data_path)
+            if not live_processor.load_data():
+                st.error("Failed to load live data from file")
+                return
+            
+            processed_data = live_processor.process_for_stock_grip()
         
         # Calculate 6-week inventory metrics
         reorder_analysis = []
