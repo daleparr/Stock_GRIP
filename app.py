@@ -205,6 +205,102 @@ def create_fallback_report():
     }
 
 
+def initialize_system_with_live_data(system):
+    """Initialize the Stock_GRIP system with live Weld data"""
+    import os
+    try:
+        # Load live data from CSV
+        live_data_path = "data/live_data/stock_grip_product_performace_aggregated_03_09_2025_11_30.csv"
+        
+        if not os.path.exists(live_data_path):
+            raise FileNotFoundError(f"Live data file not found: {live_data_path}")
+        
+        # Process live data
+        live_processor = LiveDataProcessor(live_data_path)
+        if not live_processor.load_data():
+            raise ValueError("Failed to load live data from CSV")
+        
+        processed_data = live_processor.process_for_stock_grip()
+        
+        # Get database session
+        engine = create_database(DATABASE_URL)
+        session = get_session(engine)
+        
+        # Import required models
+        from src.data.models import Product, Inventory, Demand
+        
+        # Clear existing data
+        session.query(Product).delete()
+        session.query(Inventory).delete()
+        session.query(Demand).delete()
+        
+        # Convert live data to database format
+        products_created = 0
+        for _, row in processed_data.iterrows():
+            # Create product
+            product = Product(
+                product_id=row['product_id'],
+                name=row['product_name'],
+                category=row.get('category', 'apparel'),
+                unit_cost=float(row.get('unit_cost', row['shopify_revenue'] * 0.4)),  # Estimate 40% cost
+                selling_price=float(row['shopify_revenue'] / max(row['shopify_units_sold'], 1)),
+                lead_time_days=int(row.get('lead_time_days', 7)),
+                shelf_life_days=int(row.get('shelf_life_days', 365)),
+                min_order_quantity=1,
+                max_order_quantity=1000
+            )
+            session.add(product)
+            
+            # Create inventory record
+            inventory = Inventory(
+                product_id=row['product_id'],
+                timestamp=datetime.utcnow(),
+                stock_level=int(row['shopify_units_sold'] * 2),  # Estimate stock as 2x sales
+                reserved_stock=0,
+                in_transit=0,
+                available_stock=int(row['shopify_units_sold'] * 2)
+            )
+            session.add(inventory)
+            
+            # Create demand records (historical)
+            for days_ago in range(30):  # Create 30 days of demand history
+                demand_date = datetime.utcnow() - timedelta(days=days_ago)
+                daily_demand = max(1, int(row['shopify_units_sold'] / 30))  # Distribute sales over 30 days
+                
+                demand = Demand(
+                    product_id=row['product_id'],
+                    date=demand_date,
+                    quantity_demanded=daily_demand,
+                    quantity_fulfilled=daily_demand,  # Assume all demand was fulfilled
+                    is_forecast=False
+                )
+                session.add(demand)
+            
+            products_created += 1
+        
+        # Commit all changes
+        session.commit()
+        session.close()
+        
+        # Run initial optimization
+        st.info("Running initial optimization with live data...")
+        strategic_result = system.coordinator.run_strategic_optimization()
+        tactical_result = system.coordinator.run_tactical_optimization()
+        
+        return {
+            "status": "initialized_with_live_data",
+            "timestamp": datetime.utcnow(),
+            "products_created": products_created,
+            "data_source": live_data_path,
+            "strategic_optimization": strategic_result,
+            "tactical_optimization": tactical_result
+        }
+        
+    except Exception as e:
+        st.error(f"Error initializing with live data: {e}")
+        raise e
+
+
 def main():
     """Main application function"""
     
@@ -430,14 +526,24 @@ def show_system_control(system):
     col1, col2, col3, col4 = st.columns(4)
     
     with col1:
-        if st.button("🚀 Initialize System", type="primary"):
-            with st.spinner("Initializing system..."):
+        if st.button("🚀 Initialize with Sample Data", type="secondary"):
+            with st.spinner("Initializing system with sample data..."):
                 try:
                     result = system.initialize_system(generate_sample_data=True)
-                    st.success("System initialized successfully!")
+                    st.success("System initialized with sample data!")
                     st.json(result)
                 except Exception as e:
                     st.error(f"Initialization failed: {e}")
+        
+        if st.button("📊 Initialize with Live Data", type="primary"):
+            with st.spinner("Initializing system with live Weld data..."):
+                try:
+                    result = initialize_system_with_live_data(system)
+                    st.success("System initialized with live data!")
+                    st.json(result)
+                except Exception as e:
+                    st.error(f"Live data initialization failed: {e}")
+                    st.error("Please ensure live data is uploaded first.")
     
     with col2:
         if st.button("▶️ Start Optimization"):
