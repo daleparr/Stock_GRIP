@@ -1545,6 +1545,10 @@ def show_six_week_reorder_dashboard():
             st.success("✅ Using uploaded live data from session")
             live_processor = st.session_state['live_processor']
             processed_data = live_processor.process_for_stock_grip()
+            
+            # Debug info
+            st.info(f"📊 Processing {len(processed_data)} products from uploaded data")
+            
         else:
             # Fallback to file system
             live_data_path = "data/live_data/stock_grip_product_performace_aggregated_03_09_2025_11_30.csv"
@@ -1562,20 +1566,40 @@ def show_six_week_reorder_dashboard():
                 return
             
             processed_data = live_processor.process_for_stock_grip()
+            st.info(f"📊 Processing {len(processed_data)} products from file")
+        
+        # Validate data structure
+        required_columns = ['product_name', 'shopify_units_sold', 'shopify_revenue']
+        missing_columns = [col for col in required_columns if col not in processed_data.columns]
+        
+        if missing_columns:
+            st.error(f"❌ Missing required columns: {missing_columns}")
+            st.info("Available columns: " + ", ".join(processed_data.columns.tolist()))
+            return
+        
+        # Check for SKU column
+        if 'product_sku' in processed_data.columns:
+            st.success("✅ Using actual SKU field from dataset")
+        else:
+            st.warning("⚠️ No SKU field found, using product_id as fallback")
         
         # Calculate 6-week inventory metrics
         reorder_analysis = []
         
         for _, row in processed_data.iterrows():
-            # Current metrics
-            current_stock = int(row['shopify_units_sold'] * 2)  # Estimated current stock
-            daily_sales_rate = row['shopify_units_sold'] / 30  # Daily sales rate
+            # Get actual SKU from dataset
+            sku = row.get('product_sku', row['product_id'])  # Use actual SKU field
+            
+            # More realistic current stock estimation
+            # Assume current stock is 1-2 weeks of sales (more realistic than 2 months)
+            daily_sales_rate = row['shopify_units_sold'] / 30  # Daily sales rate over 30 days
+            current_stock = max(1, int(daily_sales_rate * 10))  # 10 days of stock (more realistic)
             
             # 6-week projections
             days_until_stockout = current_stock / max(daily_sales_rate, 0.1)
             six_week_demand = daily_sales_rate * 42  # 6 weeks = 42 days
             
-            # Risk calculations
+            # Risk calculations (adjusted for more realistic stock levels)
             stockout_risk = "HIGH" if days_until_stockout < 42 else "MEDIUM" if days_until_stockout < 60 else "LOW"
             overstock_risk = "HIGH" if days_until_stockout > 72 else "LOW"  # 30+ days after 6-week restock
             
@@ -1593,10 +1617,17 @@ def show_six_week_reorder_dashboard():
                 priority = "LOW"
             
             # Revenue impact
-            revenue_at_risk = six_week_demand * (row['shopify_revenue'] / max(row['shopify_units_sold'], 1))
+            unit_price = row['shopify_revenue'] / max(row['shopify_units_sold'], 1)
+            revenue_at_risk = six_week_demand * unit_price
+            
+            # Fixed recommended order calculation
+            # Order enough to cover 6-week demand + 2-week safety buffer - current stock
+            safety_buffer = daily_sales_rate * 14  # 2 weeks safety stock
+            total_needed = six_week_demand + safety_buffer
+            recommended_order = max(0, int(total_needed - current_stock))
             
             reorder_analysis.append({
-                'SKU': row['product_id'],
+                'SKU': sku,  # Use actual SKU
                 'Product': row['product_name'],
                 'Current Stock': current_stock,
                 'Daily Sales': round(daily_sales_rate, 1),
@@ -1607,7 +1638,7 @@ def show_six_week_reorder_dashboard():
                 'Confidence': confidence,
                 'Revenue at Risk': revenue_at_risk,
                 '6-Week Demand': round(six_week_demand, 1),
-                'Recommended Order': max(0, round(six_week_demand - current_stock + (daily_sales_rate * 14), 0))  # +2 weeks buffer
+                'Recommended Order': recommended_order
             })
         
         df = pd.DataFrame(reorder_analysis)
