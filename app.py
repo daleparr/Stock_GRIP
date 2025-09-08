@@ -1588,25 +1588,45 @@ def show_six_week_reorder_dashboard():
         
         for _, row in processed_data.iterrows():
             # Get actual SKU from dataset
-            sku = row.get('product_sku', row['product_id'])  # Use actual SKU field
+            sku = row.get('product_sku', row['product_id'])
             
-            # More realistic current stock estimation
-            # Assume current stock is 1-2 weeks of sales (more realistic than 2 months)
-            daily_sales_rate = row['shopify_units_sold'] / 30  # Daily sales rate over 30 days
-            current_stock = max(1, int(daily_sales_rate * 10))  # 10 days of stock (more realistic)
+            # Use REAL inventory data if available (from unified CSV)
+            if 'current_inventory_level' in row and pd.notna(row['current_inventory_level']):
+                # REAL inventory data available
+                current_stock = int(row['current_inventory_level'])
+                available_stock = int(row.get('available_inventory', current_stock))
+                reorder_point = int(row.get('reorder_point', 21))
+                max_stock = int(row.get('max_stock_level', 75))
+                safety_days = int(row.get('safety_stock_days', 14))
+                data_source = "REAL_INVENTORY"
+            else:
+                # Fallback to estimation (old method)
+                daily_sales_rate = row['shopify_units_sold'] / 30
+                current_stock = max(1, int(daily_sales_rate * 10))
+                available_stock = current_stock
+                reorder_point = 21  # Default
+                max_stock = 75  # Default
+                safety_days = 14  # Default
+                data_source = "ESTIMATED"
             
-            # 6-week projections
-            days_until_stockout = current_stock / max(daily_sales_rate, 0.1)
+            # Calculate sales velocity
+            daily_sales_rate = row['shopify_units_sold'] / 30
+            
+            # 6-week projections using real inventory
+            days_until_stockout = available_stock / max(daily_sales_rate, 0.1)
             six_week_demand = daily_sales_rate * 42  # 6 weeks = 42 days
             
-            # Risk calculations (adjusted for more realistic stock levels)
-            stockout_risk = "HIGH" if days_until_stockout < 42 else "MEDIUM" if days_until_stockout < 60 else "LOW"
-            overstock_risk = "HIGH" if days_until_stockout > 72 else "LOW"  # 30+ days after 6-week restock
+            # Risk calculations using REAL inventory levels
+            stockout_risk = "HIGH" if available_stock <= reorder_point else "MEDIUM" if days_until_stockout < 60 else "LOW"
+            overstock_risk = "HIGH" if available_stock > max_stock else "MEDIUM" if available_stock > (max_stock * 0.8) else "LOW"
             
-            # Confidence based on sales velocity
-            confidence = "HIGH" if row['shopify_units_sold'] > 50 else "MEDIUM" if row['shopify_units_sold'] > 10 else "LOW"
+            # Confidence based on data source and sales velocity
+            if data_source == "REAL_INVENTORY":
+                confidence = "HIGH" if row['shopify_units_sold'] > 10 else "MEDIUM"
+            else:
+                confidence = "MEDIUM" if row['shopify_units_sold'] > 50 else "LOW"
             
-            # Reorder priority
+            # Reorder priority using real inventory logic
             if stockout_risk == "HIGH":
                 priority = "URGENT"
             elif stockout_risk == "MEDIUM" and overstock_risk == "LOW":
@@ -1618,18 +1638,22 @@ def show_six_week_reorder_dashboard():
             
             # Revenue impact
             unit_price = row['shopify_revenue'] / max(row['shopify_units_sold'], 1)
-            revenue_at_risk = six_week_demand * unit_price
+            revenue_at_risk = max(0, (reorder_point - available_stock)) * unit_price if available_stock < reorder_point else 0
             
-            # Fixed recommended order calculation
-            # Order enough to cover 6-week demand + 2-week safety buffer - current stock
-            safety_buffer = daily_sales_rate * 14  # 2 weeks safety stock
+            # ACCURATE recommended order calculation using REAL inventory
+            safety_buffer = daily_sales_rate * safety_days
             total_needed = six_week_demand + safety_buffer
-            recommended_order = max(0, int(total_needed - current_stock))
+            recommended_order = max(0, int(total_needed - available_stock))
+            
+            # Prevent massive overstock
+            if recommended_order > (daily_sales_rate * 90):  # More than 90 days of stock
+                recommended_order = max(0, int(daily_sales_rate * 60))  # Cap at 60 days
             
             reorder_analysis.append({
-                'SKU': sku,  # Use actual SKU
+                'SKU': sku,
                 'Product': row['product_name'],
                 'Current Stock': current_stock,
+                'Available Stock': available_stock,
                 'Daily Sales': round(daily_sales_rate, 1),
                 'Days Until Stockout': round(days_until_stockout, 1),
                 'Stockout Risk': stockout_risk,
@@ -1638,10 +1662,21 @@ def show_six_week_reorder_dashboard():
                 'Confidence': confidence,
                 'Revenue at Risk': revenue_at_risk,
                 '6-Week Demand': round(six_week_demand, 1),
-                'Recommended Order': recommended_order
+                'Recommended Order': recommended_order,
+                'Data Source': data_source,
+                'Reorder Point': reorder_point
             })
         
         df = pd.DataFrame(reorder_analysis)
+        
+        # Data source indicator
+        real_inventory_count = len(df[df['Data Source'] == 'REAL_INVENTORY']) if 'Data Source' in df.columns else 0
+        estimated_count = len(df[df['Data Source'] == 'ESTIMATED']) if 'Data Source' in df.columns else len(df)
+        
+        if real_inventory_count > 0:
+            st.success(f"✅ Using REAL inventory data for {real_inventory_count} products")
+        if estimated_count > 0:
+            st.warning(f"⚠️ Using ESTIMATED inventory for {estimated_count} products")
         
         # Key metrics row
         col1, col2, col3, col4 = st.columns(4)
@@ -1690,14 +1725,22 @@ def show_six_week_reorder_dashboard():
             else:
                 return 'background-color: #66cc66'
         
-        # Display styled dataframe
-        styled_df = df_sorted[['SKU', 'Product', 'Priority', 'Stockout Risk', 'Overstock Risk',
-                              'Days Until Stockout', 'Confidence', 'Revenue at Risk', 'Recommended Order']].style.applymap(
+        # Display styled dataframe with enhanced columns
+        display_columns = ['SKU', 'Product', 'Priority', 'Stockout Risk', 'Overstock Risk',
+                          'Current Stock', 'Available Stock', 'Days Until Stockout',
+                          'Confidence', 'Revenue at Risk', 'Recommended Order', 'Data Source']
+        
+        # Only include columns that exist in the dataframe
+        available_columns = [col for col in display_columns if col in df_sorted.columns]
+        
+        styled_df = df_sorted[available_columns].style.applymap(
             color_priority, subset=['Priority']
         ).applymap(color_risk, subset=['Stockout Risk', 'Overstock Risk']).format({
             'Revenue at Risk': '£{:,.0f}',
             'Days Until Stockout': '{:.1f}',
-            'Recommended Order': '{:,.0f}'
+            'Recommended Order': '{:,.0f}',
+            'Current Stock': '{:,.0f}',
+            'Available Stock': '{:,.0f}'
         })
         
         st.dataframe(styled_df, use_container_width=True)
