@@ -117,7 +117,13 @@ class LiveDataProcessor:
         )
         
         # Enhanced Facebook ROAS with standardized 7-day attribution window
-        facebook_spend = processed.get('facebook_spend', pd.Series([0] * len(processed)))
+        # Debug: Check for Facebook columns
+        facebook_cols = [col for col in processed.columns if 'facebook' in col.lower()]
+        print(f"DEBUG: Available Facebook columns: {facebook_cols}")
+        
+        facebook_spend = processed.get('facebook_spend',
+                                     processed.get('facebook_ad_spend',
+                                     processed.get('fb_spend', pd.Series([0] * len(processed)))))
         if isinstance(facebook_spend, pd.Series):
             facebook_spend = facebook_spend.fillna(0)
         else:
@@ -125,12 +131,16 @@ class LiveDataProcessor:
         
         # Prioritize 7-day attribution window for Facebook
         facebook_7d_revenue = processed.get('facebook_7d_attributed_revenue',
-                                          processed.get('facebook_attributed_revenue', 0))
+                                          processed.get('facebook_attributed_revenue',
+                                          processed.get('fb_attributed_revenue',
+                                          processed.get('facebook_revenue', 0))))
         processed['facebook_roas_7d'] = np.where(
             facebook_spend > 0,
             facebook_7d_revenue / facebook_spend,
             0
         )
+        
+        print(f"DEBUG: Facebook ROAS 7d calculated - Max: {processed['facebook_roas_7d'].max()}, Non-zero count: {(processed['facebook_roas_7d'] > 0).sum()}")
         
         # Keep legacy facebook_roas for backward compatibility
         processed['facebook_roas'] = processed['facebook_roas_7d']

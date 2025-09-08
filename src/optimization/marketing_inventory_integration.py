@@ -149,11 +149,28 @@ class MarketingInventoryIntegrator:
         Returns:
             DataFrame with marketing-optimized reorder recommendations
         """
-        reorder_data = product_data.copy()
-        
-        # Get marketing-adjusted demand and safety stock
-        demand_adjusted = self.calculate_marketing_adjusted_demand(reorder_data)
-        safety_adjusted = self.calculate_channel_specific_safety_stock(demand_adjusted)
+        try:
+            # Debug: Log available columns
+            self.logger.info(f"Marketing Integration Debug - Available columns: {list(product_data.columns)}")
+            
+            # Check for required marketing columns
+            required_marketing_cols = ['facebook_roas_7d', 'email_efficiency_3d', 'marketing_mix_type']
+            missing_cols = [col for col in required_marketing_cols if col not in product_data.columns]
+            
+            if missing_cols:
+                self.logger.warning(f"Missing marketing columns: {missing_cols}")
+                # Return original data with fallback calculations
+                return self._apply_fallback_calculations(product_data)
+            
+            reorder_data = product_data.copy()
+            
+            # Get marketing-adjusted demand and safety stock
+            demand_adjusted = self.calculate_marketing_adjusted_demand(reorder_data)
+            safety_adjusted = self.calculate_channel_specific_safety_stock(demand_adjusted)
+        except Exception as e:
+            self.logger.error(f"Error in marketing integration: {str(e)}")
+            # Return original data with fallback calculations
+            return self._apply_fallback_calculations(product_data)
         
         # Current inventory levels
         current_stock = safety_adjusted.get('current_inventory_level', 
@@ -300,6 +317,45 @@ class MarketingInventoryIntegrator:
         )
         
         return campaign_data
+    def _apply_fallback_calculations(self, product_data: pd.DataFrame) -> pd.DataFrame:
+        """
+        Apply fallback calculations when marketing data is unavailable
+        """
+        fallback_data = product_data.copy()
+        
+        # Add missing marketing columns with default values
+        fallback_data['facebook_roas_7d'] = 0.0
+        fallback_data['email_efficiency_3d'] = 0.0
+        fallback_data['marketing_mix_type'] = 'low_marketing_impact'
+        fallback_data['facebook_star'] = 0
+        fallback_data['email_champion'] = 0
+        fallback_data['organic_winner'] = 0
+        
+        # Basic demand calculation without marketing adjustments
+        fallback_data['base_daily_demand'] = fallback_data['shopify_units_sold'] / 30
+        fallback_data['marketing_multiplier'] = 1.0
+        fallback_data['marketing_adjusted_daily_demand'] = fallback_data['base_daily_demand']
+        fallback_data['marketing_adjusted_6week_demand'] = fallback_data['base_daily_demand'] * 42
+        
+        # Basic safety stock (no channel adjustments)
+        fallback_data['channel_volatility_multiplier'] = 1.0
+        fallback_data['channel_adjusted_safety_stock'] = fallback_data['base_daily_demand'] * 7  # 1 week safety
+        
+        # Basic reorder calculation
+        current_stock = fallback_data.get('current_inventory_level', 
+                                        fallback_data['shopify_units_sold'] / 30 * 10)
+        total_needed = (fallback_data['marketing_adjusted_6week_demand'] + 
+                       fallback_data['channel_adjusted_safety_stock'])
+        fallback_data['marketing_optimized_reorder'] = np.maximum(0, total_needed - current_stock)
+        
+        # Default marketing attributes
+        fallback_data['marketing_priority'] = 'MEDIUM'
+        fallback_data['demand_forecast_confidence'] = 0.7
+        fallback_data['marketing_revenue_opportunity'] = 0.0
+        
+        self.logger.info("Applied fallback calculations due to missing marketing data")
+        return fallback_data
+
 
 
 class CampaignInventoryCoordinator:
