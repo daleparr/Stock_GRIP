@@ -1707,21 +1707,38 @@ def show_six_week_reorder_dashboard():
         
         with col1:
             st.subheader("📊 Stockout Risk Distribution")
-            risk_counts = df['Stockout Risk'].value_counts()
-            fig_risk = px.pie(values=risk_counts.values, names=risk_counts.index,
-                             title="SKUs by Stockout Risk Level",
-                             color_discrete_map={'HIGH': '#ff4444', 'MEDIUM': '#ffaa00', 'LOW': '#88cc88'})
-            st.plotly_chart(fig_risk, use_container_width=True)
+            try:
+                if len(df) > 0:
+                    risk_counts = df['Stockout Risk'].value_counts()
+                    if len(risk_counts) > 0:
+                        fig_risk = px.pie(values=risk_counts.values, names=risk_counts.index,
+                                         title="SKUs by Stockout Risk Level",
+                                         color_discrete_map={'HIGH': '#ff4444', 'MEDIUM': '#ffaa00', 'LOW': '#88cc88'})
+                        st.plotly_chart(fig_risk, use_container_width=True)
+                    else:
+                        st.info("No risk data available for chart")
+                else:
+                    st.info("No data available for risk analysis")
+            except Exception as e:
+                st.error(f"Error generating risk chart: {e}")
+                st.info("Chart generation failed, but data processing continues below")
         
         with col2:
             st.subheader("💰 Revenue Risk Analysis")
-            fig_revenue = px.bar(df_sorted.head(10), x='SKU', y='Revenue at Risk',
-                               title="Top 10 SKUs by Revenue at Risk",
-                               color='Priority',
-                               color_discrete_map={'URGENT': '#ff4444', 'HIGH': '#ff8800',
-                                                 'MEDIUM': '#ffaa00', 'LOW': '#88cc88'})
-            fig_revenue.update_xaxis(tickangle=45)
-            st.plotly_chart(fig_revenue, use_container_width=True)
+            try:
+                if len(df_sorted) > 0:
+                    fig_revenue = px.bar(df_sorted.head(10), x='SKU', y='Revenue at Risk',
+                                       title="Top 10 SKUs by Revenue at Risk",
+                                       color='Priority',
+                                       color_discrete_map={'URGENT': '#ff4444', 'HIGH': '#ff8800',
+                                                         'MEDIUM': '#ffaa00', 'LOW': '#88cc88'})
+                    fig_revenue.update_layout(xaxis_tickangle=45)
+                    st.plotly_chart(fig_revenue, use_container_width=True)
+                else:
+                    st.info("No data available for revenue risk analysis")
+            except Exception as e:
+                st.error(f"Error generating revenue chart: {e}")
+                st.info("Chart generation failed, but data processing continues below")
         
         # Action recommendations
         st.subheader("🎯 Immediate Action Items")
